@@ -1,7 +1,3 @@
-extern crate futures;
-extern crate grpc;
-extern crate sharedlib;
-
 use grpc::ClientStub;
 use sharedlib::epaxos::*;
 use sharedlib::epaxos_grpc::*;

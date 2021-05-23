@@ -1,5 +1,3 @@
-extern crate protobuf;
-
 use std::{cmp, cmp::Ordering, collections::HashMap, fmt, time::Duration};
 
 pub const SLOW_QUORUM: usize = 3; // F + 1

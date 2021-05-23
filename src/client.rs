@@ -1,8 +1,4 @@
-extern crate futures;
-extern crate grpc;
-extern crate rayon;
-extern crate sharedlib;
-
+use futures::FutureExt;
 use grpc::ClientStub;
 use rayon::prelude::*;
 use sharedlib::epaxos_grpc::*;
@@ -23,22 +19,27 @@ fn main() {
         .enumerate()
         .for_each(|(i, (req, id))| {
             let grpc_client = Arc::new(
-                grpc::Client::new_plain(
-                    REPLICA_ADDRESSES[*id as usize],
-                    REPLICA_PORT,
-                    Default::default(),
-                )
-                .unwrap(),
+                // grpc::Client::new_plain(
+                //     REPLICA_ADDRESSES[*id as usize],
+                //     REPLICA_PORT,
+                //     Default::default(),
+                // )
+                // .unwrap(),
+
+                grpc::ClientBuilder::new(REPLICA_ADDRESSES[*id as usize],
+                    REPLICA_PORT,).build().unwrap()
             );
             let client = EpaxosServiceClient::with_client(grpc_client);
             let start = Instant::now();
             let res = client.write(grpc::RequestOptions::new(), req.clone());
-            match res.wait() {
-                Err(e) => panic!("Write Failed: {}", e),
-                Ok((_, _, _)) => {
-                    let duration = start.elapsed();
-                    println!("{} Commit Latency: {:?}", i, duration);
-                }
-            }
+            // match res.wait() {
+            //     Err(e) => panic!("Write Failed: {}", e),
+            //     Ok((_, _, _)) => {
+            //         let duration = start.elapsed();
+            //         println!("{} Commit Latency: {:?}", i, duration);
+            //     }
+            // }
+            let pre = res.join_metadata_result();
+            let pre_e = pre.
         });
 }

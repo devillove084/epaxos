@@ -1,10 +1,3 @@
-extern crate crossbeam;
-extern crate futures;
-extern crate futures_cpupool;
-extern crate grpc;
-extern crate protobuf;
-extern crate sharedlib;
-
 use crossbeam::thread as crossbeam_thread;
 use grpc::ClientStub;
 use sharedlib::epaxos as grpc_service;
@@ -32,12 +25,12 @@ impl EpaxosServer {
         println!("Initializing Replica {}", id.0);
         for i in 0..REPLICAS_NUM {
             if i != id.0 as usize {
-                let internal_client = grpc::Client::new_plain(
-                    REPLICA_ADDRESSES[i as usize],
-                    REPLICA_PORT,
-                    Default::default(),
-                )
-                .unwrap();
+                // let internal_client = grpc::Client::new_plain(
+                //     REPLICA_ADDRESSES[i as usize],
+                //     REPLICA_PORT,
+                //     Default::default(),
+                // ).unwrap();
+                let internal_client = grpc::ClientBuilder::new(REPLICA_ADDRESSES[i as usize], REPLICA_PORT).build().unwrap();
                 println!(
                     ">> Neighbor replica {} created : {:?}",
                     i, REPLICA_ADDRESSES[i as usize]
@@ -144,7 +137,7 @@ impl EpaxosServer {
     }
 
     fn execute(&self) {
-        //println!("Executing");
+        println!("Executing");
     }
 }
 
