@@ -1,9 +1,9 @@
-use futures::FutureExt;
 use grpc::ClientStub;
 use rayon::prelude::*;
 use sharedlib::epaxos_grpc::*;
 use sharedlib::logic::{WriteRequest, REPLICA_ADDRESSES, REPLICA_PORT};
 use std::{env, sync::Arc, time::Instant};
+use futures::executor;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -31,7 +31,7 @@ fn main() {
             );
             let client = EpaxosServiceClient::with_client(grpc_client);
             let start = Instant::now();
-            let res = client.write(grpc::RequestOptions::new(), req.clone());
+            let response = client.write(grpc::RequestOptions::new(), req.clone());
             // match res.wait() {
             //     Err(e) => panic!("Write Failed: {}", e),
             //     Ok((_, _, _)) => {
@@ -39,7 +39,14 @@ fn main() {
             //         println!("{} Commit Latency: {:?}", i, duration);
             //     }
             // }
-            let pre = res.join_metadata_result();
-            let pre_e = pre.
+            let res = response.join_metadata_result();
+            let r = executor::block_on(res);
+            match r {
+                Err(e) => panic!("Write Failed: {}", e),
+                Ok((_, _, _)) => {
+                    let duration = start.elapsed();
+                    println!("{} Commit Latency: {:?}", i, duration);
+                }
+            }
         });
 }

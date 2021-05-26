@@ -1,8 +1,14 @@
 use crossbeam::thread as crossbeam_thread;
-use grpc::ClientStub;
-use sharedlib::epaxos as grpc_service;
+use grpc::{ClientStub, Error, Metadata, SingleResponse};
+use sharedlib::epaxos::{self as grpc_service, WriteResponse};
 use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient, EpaxosServiceServer};
-use sharedlib::logic::*;
+//use sharedlib::logic::*;
+use futures::executor;
+use sharedlib::epaxos::AcceptOKPayload;
+use sharedlib::logic::{
+    EpaxosLogic, Path, Payload, ReplicaId, WriteRequest, REPLICAS_NUM, REPLICA_ADDRESSES,
+    REPLICA_PORT, SLOW_QUORUM,
+};
 use std::{
     collections::HashMap,
     env,
@@ -30,7 +36,10 @@ impl EpaxosServer {
                 //     REPLICA_PORT,
                 //     Default::default(),
                 // ).unwrap();
-                let internal_client = grpc::ClientBuilder::new(REPLICA_ADDRESSES[i as usize], REPLICA_PORT).build().unwrap();
+                let internal_client =
+                    grpc::ClientBuilder::new(REPLICA_ADDRESSES[i as usize], REPLICA_PORT)
+                        .build()
+                        .unwrap();
                 println!(
                     ">> Neighbor replica {} created : {:?}",
                     i, REPLICA_ADDRESSES[i as usize]
@@ -87,7 +96,15 @@ impl EpaxosServer {
                         .get(replica_id)
                         .unwrap()
                         .pre_accept(grpc::RequestOptions::new(), payload.to_grpc());
-                    match pre_accept_ok.wait() {
+                    // match pre_accept_ok.wait() {
+                    //     Err(e) => panic!("[PreAccept Stage] Replica panic {:?}", e),
+                    //     Ok((_, value, _)) => {
+                    //         pre_accept_oks.push(Payload::from_grpc(&value));
+                    //     }
+                    // }
+                    let res = pre_accept_ok.join_metadata_result();
+                    let r = executor::block_on(res);
+                    match r {
                         Err(e) => panic!("[PreAccept Stage] Replica panic {:?}", e),
                         Ok((_, value, _)) => {
                             pre_accept_oks.push(Payload::from_grpc(&value));
@@ -109,7 +126,15 @@ impl EpaxosServer {
                         .get(replica_id)
                         .unwrap()
                         .accept(grpc::RequestOptions::new(), payload.to_grpc());
-                    match accept_ok.wait() {
+                    // match accept_ok.wait() {
+                    //     Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
+                    //     Ok((_, _, _)) => {
+                    //         accept_ok_count += 1;
+                    //     }
+                    // }
+                    let res = accept_ok.join_metadata_result();
+                    let r = executor::block_on(res);
+                    match r {
                         Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
                         Ok((_, _, _)) => {
                             accept_ok_count += 1;
@@ -142,29 +167,65 @@ impl EpaxosServer {
 }
 
 impl EpaxosService for EpaxosServer {
+    // fn write(
+    //     &self,
+    //     _m: grpc::RequestOptions,
+    //     req: grpc_service::WriteRequest,
+    // ) -> grpc::SingleResponse<grpc_service::WriteResponse> {
+    //     println!(
+    //         "Received a write request with key = {} and value = {}",
+    //         req.get_key(),
+    //         req.get_value()
+    //     );
+    //     let mut r = grpc_service::WriteResponse::new();
+    //     if self.consensus(&WriteRequest::from_grpc(&req)) {
+    //         // TODO when do I actually execute?
+    //         (*self.store.lock().unwrap()).insert(req.get_key().to_owned(), req.get_value());
+    //         println!("DONE my store: {:#?}", self.store.lock().unwrap());
+    //         println!("Consensus successful. Sending a commit to client\n\n\n\n.");
+    //         r.set_commit(true);
+    //     } else {
+    //         println!("Consensus failed. Notifying client.");
+    //         r.set_commit(false);
+    //     }
+    //     grpc::SingleResponse::completed(r)
+    // }
+
     fn write(
         &self,
-        _m: grpc::RequestOptions,
-        req: grpc_service::WriteRequest,
-    ) -> grpc::SingleResponse<grpc_service::WriteResponse> {
-        println!(
-            "Received a write request with key = {} and value = {}",
-            req.get_key(),
-            req.get_value()
-        );
+        o: grpc::ServerHandlerContext,
+        req: grpc::ServerRequestSingle<sharedlib::epaxos::WriteRequest>,
+        resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::WriteResponse>) -> ::grpc::Result<()> {
+        //println!("Received a write request with key = {} and value = {}",// req.get_key(),// req.get_value());
+        // println!("Received a write request with key = {} and value = {}",);
+        // let mut r = grpc_service::WriteResponse::new();
+        // if self.consensus(&WriteRequest::from_grpc(&req)) {
+        //     // TODO when do I actually execute?
+        //     (*self.store.lock().unwrap()).insert(req.get_key().to_owned(), req.get_value());
+        //     println!("DONE my store: {:#?}", self.store.lock().unwrap());
+        //     println!("Consensus successful. Sending a commit to client\n\n\n\n.");
+        //     r.set_commit(true);
+        // } else {
+        //     println!("Consensus failed. Notifying client.");
+        //     r.set_commit(false);
+        // }
+        // grpc::SingleResponse::completed(r)
+        let req_new = req.message;
         let mut r = grpc_service::WriteResponse::new();
-        if self.consensus(&WriteRequest::from_grpc(&req)) {
-            // TODO when do I actually execute?
-            (*self.store.lock().unwrap()).insert(req.get_key().to_owned(), req.get_value());
+        if self.consensus(&WriteRequest::from_grpc(&req_new)) {
+            (*self.store.lock().unwrap()).insert(req_new.get_key().to_owned(), req_new.get_value());
             println!("DONE my store: {:#?}", self.store.lock().unwrap());
             println!("Consensus successful. Sending a commit to client\n\n\n\n.");
             r.set_commit(true);
-        } else {
+
+        }else {
             println!("Consensus failed. Notifying client.");
             r.set_commit(false);
         }
-        grpc::SingleResponse::completed(r)
+        let result = grpc::SingleResponse::completed(r);
+
     }
+
     fn read(
         &self,
         _m: grpc::RequestOptions,

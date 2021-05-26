@@ -1,4 +1,4 @@
-use std::{cmp, cmp::Ordering, collections::HashMap, fmt, time::Duration};
+use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
 
 pub const SLOW_QUORUM: usize = 3; // F + 1
 pub const FAST_QUORUM: usize = 3; // F + floor(F + 1 / 2)
