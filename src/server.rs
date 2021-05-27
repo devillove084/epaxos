@@ -1,14 +1,11 @@
 use crossbeam::thread as crossbeam_thread;
 use grpc::{ClientStub, Error, Metadata, SingleResponse};
-use sharedlib::epaxos::{self as grpc_service, WriteResponse};
+use sharedlib::epaxos::{self as grpc_service, ReadRequest, ReadResponse, WriteResponse};
 use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient, EpaxosServiceServer};
 //use sharedlib::logic::*;
 use futures::executor;
-use sharedlib::epaxos::AcceptOKPayload;
-use sharedlib::logic::{
-    EpaxosLogic, Path, Payload, ReplicaId, WriteRequest, REPLICAS_NUM, REPLICA_ADDRESSES,
-    REPLICA_PORT, SLOW_QUORUM,
-};
+use sharedlib::epaxos::{AcceptOKPayload};
+use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept, REPLICAS_NUM, REPLICA_ADDRESSES, REPLICA_PORT, ReplicaId, SLOW_QUORUM, WriteRequest};
 use std::{
     collections::HashMap,
     env,
@@ -223,53 +220,110 @@ impl EpaxosService for EpaxosServer {
             r.set_commit(false);
         }
         let result = grpc::SingleResponse::completed(r);
-
+        Ok(())
     }
 
+    // fn read(
+    //     &self,
+    //     _m: grpc::RequestOptions,
+    //     req: grpc_service::ReadRequest,
+    // ) -> grpc::SingleResponse<grpc_service::ReadResponse> {
+    //     println!("Received a read request with key = {}", req.get_key());
+    //     self.execute();
+    //     let mut r = grpc_service::ReadResponse::new();
+    //     r.set_value(*((*self.store.lock().unwrap()).get(req.get_key())).unwrap());
+    //     grpc::SingleResponse::completed(r)
+    // }
     fn read(
-        &self,
-        _m: grpc::RequestOptions,
-        req: grpc_service::ReadRequest,
-    ) -> grpc::SingleResponse<grpc_service::ReadResponse> {
-        println!("Received a read request with key = {}", req.get_key());
-        self.execute();
-        let mut r = grpc_service::ReadResponse::new();
-        r.set_value(*((*self.store.lock().unwrap()).get(req.get_key())).unwrap());
-        grpc::SingleResponse::completed(r)
+        &self, 
+        o: ::grpc::ServerHandlerContext, 
+        req: ::grpc::ServerRequestSingle<ReadRequest>, 
+        resp: ::grpc::ServerResponseUnarySink<ReadResponse>) -> grpc::Result<()> {
+            let r_req = req.message;
+
+            println!("Received a read request with key = {}", r_req.get_key());
+            self.execute();
+            let mut r = grpc_service::ReadResponse::new();
+            r.set_value(*((*self.store.lock().unwrap()).get(r_req.get_key())).unwrap());
+            grpc::SingleResponse::completed(r);
+            Ok(())
     }
 
+    // fn pre_accept(
+    //     &self,
+    //     _o: grpc::RequestOptions,
+    //     p: grpc_service::Payload,
+    // ) -> grpc::SingleResponse<grpc_service::Payload> {
+    //     println!("Received PreAccept");
+    //     let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //     let request = PreAccept(Payload::from_grpc(&p));
+    //     let response = epaxos_logic.pre_accept_(request);
+    //     grpc::SingleResponse::completed(response.0.to_grpc())
+    //}
     fn pre_accept(
-        &self,
-        _o: grpc::RequestOptions,
-        p: grpc_service::Payload,
-    ) -> grpc::SingleResponse<grpc_service::Payload> {
-        println!("Received PreAccept");
-        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-        let request = PreAccept(Payload::from_grpc(&p));
-        let response = epaxos_logic.pre_accept_(request);
-        grpc::SingleResponse::completed(response.0.to_grpc())
+        &self, 
+        o: grpc::ServerHandlerContext, 
+        req: grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
+        resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::Payload>) -> ::grpc::Result<()> {
+        
+            println!("Received PreAccept");
+            let r = req.message;
+            let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+            let request = PreAccept(Payload::from_grpc(&r));
+            let response = epaxos_logic.pre_accept_(request);
+            grpc::SingleResponse::completed(response.0.to_grpc());
+            Ok(())    
     }
+
+    // fn accept(
+    //     &self,
+    //     _o: grpc::RequestOptions,
+    //     p: grpc_service::Payload,
+    // ) -> grpc::SingleResponse<grpc_service::AcceptOKPayload> {
+    //     let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //     let request = Accept(Payload::from_grpc(&p));
+    //     let response = epaxos_logic.accept_(request);
+    //     grpc::SingleResponse::completed(response.0.to_grpc())
+    // }
 
     fn accept(
-        &self,
-        _o: grpc::RequestOptions,
-        p: grpc_service::Payload,
-    ) -> grpc::SingleResponse<grpc_service::AcceptOKPayload> {
-        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-        let request = Accept(Payload::from_grpc(&p));
-        let response = epaxos_logic.accept_(request);
-        grpc::SingleResponse::completed(response.0.to_grpc())
+        &self, 
+        o: ::grpc::ServerHandlerContext, 
+        req: ::grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
+        resp: ::grpc::ServerResponseUnarySink<sharedlib::epaxos::AcceptOKPayload>) -> ::grpc::Result<()> {
+        
+            let r = req.message;
+            let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+            let request = Accept(Payload::from_grpc(&r));
+            let response = epaxos_logic.accept_(request);
+            grpc::SingleResponse::completed(response.0.to_grpc());
+            Ok(())
+
     }
 
+    // fn commit(
+    //     &self,
+    //     _o: grpc::RequestOptions,
+    //     p: grpc_service::Payload,
+    // ) -> grpc::SingleResponse<grpc_service::Empty> {
+    //     let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //     let request = Commit(Payload::from_grpc(&p));
+    //     epaxos_logic.commit_(request);
+    //     grpc::SingleResponse::completed(grpc_service::Empty::new())
+    // }
+
     fn commit(
-        &self,
-        _o: grpc::RequestOptions,
-        p: grpc_service::Payload,
-    ) -> grpc::SingleResponse<grpc_service::Empty> {
-        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-        let request = Commit(Payload::from_grpc(&p));
-        epaxos_logic.commit_(request);
-        grpc::SingleResponse::completed(grpc_service::Empty::new())
+        &self, 
+        o: grpc::ServerHandlerContext, 
+        req: grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
+        resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::Empty>) -> grpc::Result<()> {
+            
+            let r = req.message;
+            let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+            let request = Commit(Payload::from_grpc(&r));
+            epaxos_logic.commit_(request);
+            grpc::SingleResponse::completed(grpc_service::Empty::new());
+            Ok(())
     }
 }
 
