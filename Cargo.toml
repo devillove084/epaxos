@@ -1,23 +1,27 @@
 [package]
-name = "epaxos_rs"
-version = "0.1.0"
-authors = ["Pi Songkuntham <pisong@princeton.edu>"]
+name = "epaxos"
+version = "0.2.0"
+authors = ["luhuanbing084@gmail.com"]
 license = "MIT"
 description = "A Rust implementation of EPaxos"
 edition = "2018"
 
 [dependencies]
-grpc            = "0.8.3"
-grpc-protobuf = "0.8.3"
+#grpc            = "0.8.3"
+#grpc-protobuf = "0.8.3"
 protobuf        = "2.18.2"
-protoc-rust = "2.18.2"
+#protoc-rust = "2.18.2"
 futures         = "0.3.15"
 futures-cpupool = "0.1.8"
 crossbeam = "0.8.0"
 rayon = "1.5.1"
+grpcio = "0.9.0"
+smol = "1.2.5"
+thiserror = "1.0.25"
 
 [build-dependencies]
-protoc-rust-grpc = "0.8.3"
+#protoc-rust-grpc = "0.8.3"
+protoc-grpcio = "3.0.0"
 
 [lib]
 name = "sharedlib"

@@ -9,11 +9,11 @@ package epaxos;
 // }
 
 service EpaxosService {
-    rpc pre_accept(Payload) returns (Payload);
-    rpc accept(Payload) returns (AcceptOKPayload);
-    rpc commit(Payload) returns (Empty);
-    rpc write(WriteRequest) returns (WriteResponse);
-    rpc read(ReadRequest) returns (ReadResponse);
+    rpc pre_accept(Payload) returns (Payload) {};
+    rpc accept(Payload) returns (AcceptOKPayload) {};
+    rpc commit(Payload) returns (Empty) {};
+    rpc write(WriteRequest) returns (WriteResponse) {};
+    rpc read(ReadRequest) returns (ReadResponse) {};
 }
 
 message WriteRequest {

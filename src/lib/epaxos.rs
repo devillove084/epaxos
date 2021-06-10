@@ -1543,12 +1543,12 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\"o\n\x0fAcceptOKPayload\
     \x12.\n\x07command\x18\x01\x20\x01(\x0b2\x14.epaxos.WriteRequestR\x07com\
     mand\x12,\n\x08instance\x18\x04\x20\x01(\x0b2\x10.epaxos.InstanceR\x08in\
-    stance\"\x07\n\x05Empty2\x86\x02\n\rEpaxosService\x12.\n\npre_accept\x12\
-    \x0f.epaxos.Payload\x1a\x0f.epaxos.Payload\x122\n\x06accept\x12\x0f.epax\
-    os.Payload\x1a\x17.epaxos.AcceptOKPayload\x12(\n\x06commit\x12\x0f.epaxo\
-    s.Payload\x1a\r.epaxos.Empty\x124\n\x05write\x12\x14.epaxos.WriteRequest\
-    \x1a\x15.epaxos.WriteResponse\x121\n\x04read\x12\x13.epaxos.ReadRequest\
-    \x1a\x14.epaxos.ReadResponseb\x06proto3\
+    stance\"\x07\n\x05Empty2\x90\x02\n\rEpaxosService\x120\n\npre_accept\x12\
+    \x0f.epaxos.Payload\x1a\x0f.epaxos.Payload\"\0\x124\n\x06accept\x12\x0f.\
+    epaxos.Payload\x1a\x17.epaxos.AcceptOKPayload\"\0\x12*\n\x06commit\x12\
+    \x0f.epaxos.Payload\x1a\r.epaxos.Empty\"\0\x126\n\x05write\x12\x14.epaxo\
+    s.WriteRequest\x1a\x15.epaxos.WriteResponse\"\0\x123\n\x04read\x12\x13.e\
+    paxos.ReadRequest\x1a\x14.epaxos.ReadResponse\"\0b\x06proto3\
 ";
 
 static file_descriptor_proto_lazy: ::protobuf::rt::LazyV2<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::rt::LazyV2::INIT;

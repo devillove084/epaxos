@@ -1,17 +1,15 @@
+#![allow(unused_variables)]
+#![feature(impl_trait_in_bindings)]
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 use crossbeam::thread as crossbeam_thread;
-use grpc::{ClientStub, Error, Metadata, SingleResponse};
-use sharedlib::epaxos::{self as grpc_service, ReadRequest, ReadResponse, WriteResponse};
-use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient, EpaxosServiceServer};
-//use sharedlib::logic::*;
-use futures::executor;
-use sharedlib::epaxos::{AcceptOKPayload};
+use grpcio::{ChannelBuilder, EnvBuilder, UnarySink};
+use sharedlib::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadResponse, WriteResponse};
+use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
 use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept, REPLICAS_NUM, REPLICA_ADDRESSES, REPLICA_PORT, ReplicaId, SLOW_QUORUM, WriteRequest};
-use std::{
-    collections::HashMap,
-    env,
-    sync::{Arc, Mutex},
-    thread,
-};
 
 struct EpaxosServer {
     // In grpc, parameters in service are immutable.
@@ -33,15 +31,16 @@ impl EpaxosServer {
                 //     REPLICA_PORT,
                 //     Default::default(),
                 // ).unwrap();
-                let internal_client =
-                    grpc::ClientBuilder::new(REPLICA_ADDRESSES[i as usize], REPLICA_PORT)
-                        .build()
-                        .unwrap();
+                //let internal_client = grpc::ClientBuilder::new(REPLICA_ADDRESSES[i as usize], REPLICA_PORT).build().unwrap();
+                let env = Arc::new(EnvBuilder::new().build());
+                //let ch = ChannelBuilder::new(env).connect(CONTROLLER_END_POINT);
+                let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize]) + &String::from(REPLICA_PORT)));
                 println!(
                     ">> Neighbor replica {} created : {:?}",
                     i, REPLICA_ADDRESSES[i as usize]
                 );
-                let replica = EpaxosServiceClient::with_client(Arc::new(internal_client));
+                //let replica = EpaxosServiceClient::with_client(Arc::new(internal_client));
+                let replica = EpaxosServiceClient::new(ch);
                 replicas.insert(ReplicaId(i as u32), replica);
             }
         }
@@ -88,25 +87,34 @@ impl EpaxosServer {
             //println!("Sending PreAccept to {:?}", replica_id);
             crossbeam_thread::scope(|s| {
                 s.spawn(|_| {
-                    let pre_accept_ok = self
-                        .replicas
-                        .get(replica_id)
-                        .unwrap()
-                        .pre_accept(grpc::RequestOptions::new(), payload.to_grpc());
+                    //let pre_accept_ok = self.replicas.get(replica_id).unwrap().pre_accept(grpc::RequestOptions::new(), payload.to_grpc());
+                    let pre_accept_ok = self.replicas
+                    .get(replica_id)
+                    .unwrap()
+                    .pre_accept(&payload.to_grpc());
                     // match pre_accept_ok.wait() {
                     //     Err(e) => panic!("[PreAccept Stage] Replica panic {:?}", e),
                     //     Ok((_, value, _)) => {
                     //         pre_accept_oks.push(Payload::from_grpc(&value));
                     //     }
                     // }
-                    let res = pre_accept_ok.join_metadata_result();
-                    let r = executor::block_on(res);
-                    match r {
-                        Err(e) => panic!("[PreAccept Stage] Replica panic {:?}", e),
-                        Ok((_, value, _)) => {
-                            pre_accept_oks.push(Payload::from_grpc(&value));
-                        }
-                    }
+                    let p = pre_accept_ok.unwrap();
+                    pre_accept_oks.push(Payload::from_grpc(&p));
+                    // let pre = pre_accept_ok;
+                    // match pre {
+                    //     Err(_) => panic!("[PreAccept Stage] Replica panic"),
+                    //     Ok(_) => {
+                    //         pre_accept_oks.push(Payload::from_grpc(&p));
+                    //     }
+                    // }
+                    // let res = pre_accept_ok.join_metadata_result();
+                    // let r = executor::block_on(res);
+                    // match r {
+                    //     Err(e) => panic!("[PreAccept Stage] Replica panic {:?}", e),
+                    //     Ok((_, value, _)) => {
+                    //         pre_accept_oks.push(Payload::from_grpc(&value));
+                    //     }
+                    // }
                 });
             })
             .unwrap();
@@ -122,21 +130,27 @@ impl EpaxosServer {
                         .replicas
                         .get(replica_id)
                         .unwrap()
-                        .accept(grpc::RequestOptions::new(), payload.to_grpc());
+                        .accept(&payload.to_grpc());
                     // match accept_ok.wait() {
                     //     Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
                     //     Ok((_, _, _)) => {
                     //         accept_ok_count += 1;
                     //     }
                     // }
-                    let res = accept_ok.join_metadata_result();
-                    let r = executor::block_on(res);
-                    match r {
+                    match accept_ok {
                         Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
-                        Ok((_, _, _)) => {
+                        Ok(Payload) => {
                             accept_ok_count += 1;
                         }
                     }
+                    // let res = accept_ok.join_metadata_result();
+                    // let r = executor::block_on(res);
+                    // match r {
+                    //     Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
+                    //     Ok((_, _, _)) => {
+                    //         accept_ok_count += 1;
+                    //     }
+                    // }
                 });
             })
             .unwrap();
@@ -150,7 +164,7 @@ impl EpaxosServer {
                     self.replicas
                         .get(replica_id)
                         .unwrap()
-                        .commit(grpc::RequestOptions::new(), payload.to_grpc());
+                        .commit(&payload.to_grpc());
                     println!("Sending Commit to replica {}", replica_id.0);
                 });
             })
@@ -188,29 +202,31 @@ impl EpaxosService for EpaxosServer {
     //     grpc::SingleResponse::completed(r)
     // }
 
-    fn write(
-        &self,
-        o: grpc::ServerHandlerContext,
-        req: grpc::ServerRequestSingle<sharedlib::epaxos::WriteRequest>,
-        resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::WriteResponse>) -> ::grpc::Result<()> {
-        //println!("Received a write request with key = {} and value = {}",// req.get_key(),// req.get_value());
-        // println!("Received a write request with key = {} and value = {}",);
-        // let mut r = grpc_service::WriteResponse::new();
-        // if self.consensus(&WriteRequest::from_grpc(&req)) {
-        //     // TODO when do I actually execute?
-        //     (*self.store.lock().unwrap()).insert(req.get_key().to_owned(), req.get_value());
-        //     println!("DONE my store: {:#?}", self.store.lock().unwrap());
-        //     println!("Consensus successful. Sending a commit to client\n\n\n\n.");
-        //     r.set_commit(true);
-        // } else {
-        //     println!("Consensus failed. Notifying client.");
-        //     r.set_commit(false);
-        // }
-        // grpc::SingleResponse::completed(r)
-        let req_new = req.message;
+    // fn write(
+    //     &self,
+    //     o: grpc::ServerHandlerContext,
+    //     req: grpc::ServerRequestSingle<sharedlib::epaxos::WriteRequest>,
+    //     resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::WriteResponse>) -> ::grpc::Result<()> {
+    //     let req_new = req.message;
+    //     let mut r = grpc_service::WriteResponse::new();
+    //     if self.consensus(&WriteRequest::from_grpc(&req_new)) {
+    //         (*self.store.lock().unwrap()).insert(req_new.get_key().to_owned(), req_new.get_value());
+    //         println!("DONE my store: {:#?}", self.store.lock().unwrap());
+    //         println!("Consensus successful. Sending a commit to client\n\n\n\n.");
+    //         r.set_commit(true);
+
+    //     }else {
+    //         println!("Consensus failed. Notifying client.");
+    //         r.set_commit(false);
+    //     }
+    //     let result = grpc::SingleResponse::completed(r);
+    //     Ok(())
+    // }
+
+    fn write(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::WriteRequest, sink: ::grpcio::UnarySink<WriteResponse>) {
         let mut r = grpc_service::WriteResponse::new();
-        if self.consensus(&WriteRequest::from_grpc(&req_new)) {
-            (*self.store.lock().unwrap()).insert(req_new.get_key().to_owned(), req_new.get_value());
+        if self.consensus(&WriteRequest::from_grpc(&req)) {
+            (*self.store.lock().unwrap()).insert(req.get_key().to_owned(), req.get_value());
             println!("DONE my store: {:#?}", self.store.lock().unwrap());
             println!("Consensus successful. Sending a commit to client\n\n\n\n.");
             r.set_commit(true);
@@ -219,8 +235,7 @@ impl EpaxosService for EpaxosServer {
             println!("Consensus failed. Notifying client.");
             r.set_commit(false);
         }
-        let result = grpc::SingleResponse::completed(r);
-        Ok(())
+        sink.success(r);
     }
 
     // fn read(
@@ -234,19 +249,26 @@ impl EpaxosService for EpaxosServer {
     //     r.set_value(*((*self.store.lock().unwrap()).get(req.get_key())).unwrap());
     //     grpc::SingleResponse::completed(r)
     // }
-    fn read(
-        &self, 
-        o: ::grpc::ServerHandlerContext, 
-        req: ::grpc::ServerRequestSingle<ReadRequest>, 
-        resp: ::grpc::ServerResponseUnarySink<ReadResponse>) -> grpc::Result<()> {
-            let r_req = req.message;
+    // fn read(
+    //     &self, 
+    //     o: ::grpc::ServerHandlerContext, 
+    //     req: ::grpc::ServerRequestSingle<ReadRequest>, 
+    //     resp: ::grpc::ServerResponseUnarySink<ReadResponse>) -> grpc::Result<()> {
+    //         let r_req = req.message;
 
-            println!("Received a read request with key = {}", r_req.get_key());
+    //         println!("Received a read request with key = {}", r_req.get_key());
+    //         self.execute();
+    //         let mut r = grpc_service::ReadResponse::new();
+    //         r.set_value(*((*self.store.lock().unwrap()).get(r_req.get_key())).unwrap());
+    //         grpc::SingleResponse::completed(r);
+    //         Ok(())
+    // }
+    fn read(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::ReadRequest, sink: ::grpcio::UnarySink<ReadResponse>) {
+            println!("Received a read request with key = {}", req.get_key());
             self.execute();
             let mut r = grpc_service::ReadResponse::new();
-            r.set_value(*((*self.store.lock().unwrap()).get(r_req.get_key())).unwrap());
-            grpc::SingleResponse::completed(r);
-            Ok(())
+            r.set_value(*((*self.store.lock().unwrap()).get(req.get_key())).unwrap());
+            sink.success(r);
     }
 
     // fn pre_accept(
@@ -260,19 +282,27 @@ impl EpaxosService for EpaxosServer {
     //     let response = epaxos_logic.pre_accept_(request);
     //     grpc::SingleResponse::completed(response.0.to_grpc())
     //}
-    fn pre_accept(
-        &self, 
-        o: grpc::ServerHandlerContext, 
-        req: grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
-        resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::Payload>) -> ::grpc::Result<()> {
+    // fn pre_accept(
+    //     &self, 
+    //     o: grpc::ServerHandlerContext, 
+    //     req: grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
+    //     resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::Payload>) -> ::grpc::Result<()> {
         
-            println!("Received PreAccept");
-            let r = req.message;
-            let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-            let request = PreAccept(Payload::from_grpc(&r));
-            let response = epaxos_logic.pre_accept_(request);
-            grpc::SingleResponse::completed(response.0.to_grpc());
-            Ok(())    
+    //         println!("Received PreAccept");
+    //         let r = req.message;
+    //         let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //         let request = PreAccept(Payload::from_grpc(&r));
+    //         let response = epaxos_logic.pre_accept_(request);
+    //         grpc::SingleResponse::completed(response.0.to_grpc());
+    //         Ok(())    
+    // }
+
+    fn pre_accept(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::Payload, sink: UnarySink<sharedlib::epaxos::Payload>) {
+        println!("Received PreAccept");
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        let request = PreAccept(Payload::from_grpc(&req));
+        let response = epaxos_logic.pre_accept_(request);
+        sink.success(response.0.to_grpc());
     }
 
     // fn accept(
@@ -286,19 +316,26 @@ impl EpaxosService for EpaxosServer {
     //     grpc::SingleResponse::completed(response.0.to_grpc())
     // }
 
-    fn accept(
-        &self, 
-        o: ::grpc::ServerHandlerContext, 
-        req: ::grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
-        resp: ::grpc::ServerResponseUnarySink<sharedlib::epaxos::AcceptOKPayload>) -> ::grpc::Result<()> {
+    // fn accept(
+    //     &self, 
+    //     o: ::grpc::ServerHandlerContext, 
+    //     req: ::grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
+    //     resp: ::grpc::ServerResponseUnarySink<sharedlib::epaxos::AcceptOKPayload>) -> ::grpc::Result<()> {
         
-            let r = req.message;
-            let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-            let request = Accept(Payload::from_grpc(&r));
-            let response = epaxos_logic.accept_(request);
-            grpc::SingleResponse::completed(response.0.to_grpc());
-            Ok(())
+    //         let r = req.message;
+    //         let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //         let request = Accept(Payload::from_grpc(&r));
+    //         let response = epaxos_logic.accept_(request);
+    //         grpc::SingleResponse::completed(response.0.to_grpc());
+    //         Ok(())
 
+    // }
+
+    fn accept(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::Payload, sink: ::grpcio::UnarySink<AcceptOKPayload>) {
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        let request = Accept(Payload::from_grpc(&req));
+        let response = epaxos_logic.accept_(request);
+        sink.success(response.0.to_grpc());
     }
 
     // fn commit(
@@ -312,37 +349,48 @@ impl EpaxosService for EpaxosServer {
     //     grpc::SingleResponse::completed(grpc_service::Empty::new())
     // }
 
-    fn commit(
-        &self, 
-        o: grpc::ServerHandlerContext, 
-        req: grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
-        resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::Empty>) -> grpc::Result<()> {
+    // fn commit(
+    //     &self, 
+    //     o: grpc::ServerHandlerContext, 
+    //     req: grpc::ServerRequestSingle<sharedlib::epaxos::Payload>, 
+    //     resp: grpc::ServerResponseUnarySink<sharedlib::epaxos::Empty>) -> grpc::Result<()> {
             
-            let r = req.message;
-            let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-            let request = Commit(Payload::from_grpc(&r));
-            epaxos_logic.commit_(request);
-            grpc::SingleResponse::completed(grpc_service::Empty::new());
-            Ok(())
+    //         let r = req.message;
+    //         let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //         let request = Commit(Payload::from_grpc(&r));
+    //         epaxos_logic.commit_(request);
+    //         grpc::SingleResponse::completed(grpc_service::Empty::new());
+    //         Ok(())
+    // }
+
+    fn commit(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::Payload, sink: ::grpcio::UnarySink<Empty>) {
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        let request = Commit(Payload::from_grpc(&req));
+        epaxos_logic.commit_(request);
     }
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    // let args: Vec<String> = env::args().collect();
 
-    let id: u32 = args[1].parse().unwrap();
-    let r1: u32 = args[2].parse().unwrap();
-    let r2: u32 = args[3].parse().unwrap();
-    let mut server_builder1 = grpc::ServerBuilder::new_plain();
-    server_builder1.add_service(EpaxosServiceServer::new_service_def(EpaxosServer::init(
-        ReplicaId(id),
-        vec![ReplicaId(r1), ReplicaId(r2)],
-    )));
-    server_builder1.http.set_port(REPLICA_PORT);
-    let server1 = server_builder1.build().expect("build");
-    println!(">> Me {}", server1.local_addr());
+    // // let id: u32 = args[1].parse().unwrap();
+    // // let r1: u32 = args[2].parse().unwrap();
+    // // let r2: u32 = args[3].parse().unwrap();
+    // // let mut server_builder1 = grpc::ServerBuilder::new_plain();
+    // // server_builder1.add_service(EpaxosServiceServer::new_service_def(EpaxosServer::init(
+    // //     ReplicaId(1),
+    // //     vec![ReplicaId(2), ReplicaId(3)],
+    // // )));
+    // let mut server = grpcio::ServerBuilder::new(env);
+    // server_builder1.http.set_port(REPLICA_PORT);
+    // let server1 = server_builder1.build().expect("build");
+    // println!(">> Me {}", server1.local_addr());
 
     // Blocks the main thread forever
+    let env = Arc::new(EnvBuilder::new().build());
+    //let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize]) + &String::from(REPLICA_PORT)));
+    let mut server_build = grpcio::ServerBuilder::new(env);
+    let nn = EpaxosServer::init(ReplicaId(1), vec![ReplicaId(2), ReplicaId(3)],);
     loop {
         thread::park();
     }

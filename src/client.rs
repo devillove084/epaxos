@@ -1,9 +1,10 @@
-use grpc::ClientStub;
+#![allow(unused_variables)]
+
+use grpcio::{ChannelBuilder, EnvBuilder};
 use rayon::prelude::*;
 use sharedlib::epaxos_grpc::*;
 use sharedlib::logic::{WriteRequest, REPLICA_ADDRESSES, REPLICA_PORT};
 use std::{env, sync::Arc, time::Instant};
-use futures::executor;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -18,20 +19,24 @@ fn main() {
         .par_iter_mut()
         .enumerate()
         .for_each(|(i, (req, id))| {
-            let grpc_client = Arc::new(
-                // grpc::Client::new_plain(
-                //     REPLICA_ADDRESSES[*id as usize],
-                //     REPLICA_PORT,
-                //     Default::default(),
-                // )
-                // .unwrap(),
+            let env = Arc::new(EnvBuilder::new().build());
+            let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize]) + &String::from(REPLICA_PORT)));
+            // let grpc_client = Arc::new(
+            //     // grpc::Client::new_plain(
+            //     //     REPLICA_ADDRESSES[*id as usize],
+            //     //     REPLICA_PORT,
+            //     //     Default::default(),
+            //     // )
+            //     // .unwrap(),
 
-                grpc::ClientBuilder::new(REPLICA_ADDRESSES[*id as usize],
-                    REPLICA_PORT,).build().unwrap()
-            );
-            let client = EpaxosServiceClient::with_client(grpc_client);
+            //     // grpc::ClientBuilder::new(REPLICA_ADDRESSES[*id as usize],
+            //     //     REPLICA_PORT,).build().unwrap()
+                
+            // );
+            let client = EpaxosServiceClient::new(ch);
+            //let client = EpaxosServiceClient::with_client(grpc_client);
             let start = Instant::now();
-            let response = client.write(grpc::RequestOptions::new(), req.clone());
+            let r = client.write(req);
             // match res.wait() {
             //     Err(e) => panic!("Write Failed: {}", e),
             //     Ok((_, _, _)) => {
@@ -39,11 +44,9 @@ fn main() {
             //         println!("{} Commit Latency: {:?}", i, duration);
             //     }
             // }
-            let res = response.join_metadata_result();
-            let r = executor::block_on(res);
             match r {
                 Err(e) => panic!("Write Failed: {}", e),
-                Ok((_, _, _)) => {
+                Ok(_write_response) => {
                     let duration = start.elapsed();
                     println!("{} Commit Latency: {:?}", i, duration);
                 }
