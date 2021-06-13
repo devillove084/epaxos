@@ -20,7 +20,7 @@ fn main() {
         .enumerate()
         .for_each(|(i, (req, id))| {
             let env = Arc::new(EnvBuilder::new().build());
-            let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize]) + &String::from(REPLICA_PORT)));
+            let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize])+ ":" + &String::from(REPLICA_PORT)));
             // let grpc_client = Arc::new(
             //     // grpc::Client::new_plain(
             //     //     REPLICA_ADDRESSES[*id as usize],

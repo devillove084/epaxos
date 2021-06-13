@@ -11,6 +11,7 @@ use sharedlib::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadRespon
 use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
 use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept, REPLICAS_NUM, REPLICA_ADDRESSES, REPLICA_PORT, ReplicaId, SLOW_QUORUM, WriteRequest};
 
+#[derive(Clone)]
 struct EpaxosServer {
     // In grpc, parameters in service are immutable.
     // See https://github.com/stepancheg/grpc-rust/blob/master/docs/FAQ.md
@@ -389,8 +390,10 @@ fn main() {
     // Blocks the main thread forever
     let env = Arc::new(EnvBuilder::new().build());
     //let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize]) + &String::from(REPLICA_PORT)));
-    let mut server_build = grpcio::ServerBuilder::new(env);
     let nn = EpaxosServer::init(ReplicaId(1), vec![ReplicaId(2), ReplicaId(3)],);
+    let service = sharedlib::epaxos_grpc::create_epaxos_service(nn);
+    let mut server_build = grpcio::ServerBuilder::new(env).register_service(service).bind("127.0.0.1", 10000).build().unwrap();
+    server_build.start();
     loop {
         thread::park();
     }
