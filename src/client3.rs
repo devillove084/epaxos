@@ -8,7 +8,7 @@ use std::sync::Arc;
 fn main() {
     //let grpc_client = Arc::new(grpc::Client::new_plain("127.0.0.1", 8080, Default::default()).unwrap());
     let env = Arc::new(EnvBuilder::new().build());
-    let ch = ChannelBuilder::new(env).connect(&(String::from("127.0.0.1") + &String::from("8080")));
+    let ch = ChannelBuilder::new(env).connect("127.0.0.1:10000");
     let client = EpaxosServiceClient::new(ch);
     // let mut write_req = WriteRequest::new();
     // write_req.set_key("pi".to_owned());

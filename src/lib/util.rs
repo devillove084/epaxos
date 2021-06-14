@@ -3,7 +3,7 @@ use grpcio::{RpcStatus, UnarySink};
 use std::{fmt::Error, result::Result};
 
 
-/// `DatenLord` Result type
+/// `Epaxos` Result type
 pub type EpaxosResult<T> = Result<T, Error>;
 
 /// Send async success `gRPC` response

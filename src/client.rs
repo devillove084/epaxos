@@ -20,21 +20,8 @@ fn main() {
         .enumerate()
         .for_each(|(i, (req, id))| {
             let env = Arc::new(EnvBuilder::new().build());
-            let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize])+ ":" + &String::from(REPLICA_PORT)));
-            // let grpc_client = Arc::new(
-            //     // grpc::Client::new_plain(
-            //     //     REPLICA_ADDRESSES[*id as usize],
-            //     //     REPLICA_PORT,
-            //     //     Default::default(),
-            //     // )
-            //     // .unwrap(),
-
-            //     // grpc::ClientBuilder::new(REPLICA_ADDRESSES[*id as usize],
-            //     //     REPLICA_PORT,).build().unwrap()
-                
-            // );
+            let ch = ChannelBuilder::new(env).connect("127.0.0.1:10000");
             let client = EpaxosServiceClient::new(ch);
-            //let client = EpaxosServiceClient::with_client(grpc_client);
             let start = Instant::now();
             let r = client.write(req);
             // match res.wait() {
