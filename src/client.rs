@@ -3,7 +3,7 @@
 use grpcio::{ChannelBuilder, EnvBuilder};
 use rayon::prelude::*;
 use sharedlib::epaxos_grpc::*;
-use sharedlib::logic::{WriteRequest, REPLICA_ADDRESSES, REPLICA_PORT};
+use sharedlib::logic::{WriteRequest};
 use std::{env, sync::Arc, time::Instant};
 
 fn main() {

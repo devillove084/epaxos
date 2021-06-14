@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+#![allow(incomplete_features)]
 #![feature(impl_trait_in_bindings)]
 
 use std::collections::HashMap;
@@ -9,7 +10,7 @@ use crossbeam::thread as crossbeam_thread;
 use grpcio::{ChannelBuilder, EnvBuilder, UnarySink};
 use sharedlib::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadResponse, WriteResponse};
 use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
-use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept, REPLICAS_NUM, REPLICA_ADDRESSES, REPLICA_PORT, ReplicaId, SLOW_QUORUM, WriteRequest};
+use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept, REPLICAS_NUM, REPLICA_ADDRESSES, ReplicaId, SLOW_QUORUM, WriteRequest};
 
 #[derive(Clone)]
 struct EpaxosServerImpl {
@@ -148,7 +149,7 @@ impl EpaxosServerInner {
                         .accept(&payload.to_grpc());
                     match accept_ok {
                         Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
-                        Ok(Payload) => {
+                        Ok(payload) => {
                             accept_ok_count += 1;
                         }
                     }
