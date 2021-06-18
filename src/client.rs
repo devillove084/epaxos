@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use grpcio::{ChannelBuilder, EnvBuilder};
+use log::info;
 use rayon::prelude::*;
 use sharedlib::epaxos_grpc::*;
 use sharedlib::logic::{WriteRequest};
@@ -35,7 +36,7 @@ fn main() {
                 Err(e) => panic!("Write Failed: {}", e),
                 Ok(_write_response) => {
                     let duration = start.elapsed();
-                    println!("{} Commit Latency: {:?}", i, duration);
+                    info!("{} Commit Latency: {:?}", i, duration);
                 }
             }
         });

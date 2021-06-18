@@ -3,7 +3,7 @@ use grpcio::EnvBuilder;
 use sharedlib::epaxos::*;
 use sharedlib::epaxos_grpc::*;
 use std::sync::Arc;
-
+use log::{info, trace, warn, error};
 
 fn main() {
     //let grpc_client = Arc::new(grpc::Client::new_plain("127.0.0.1", 8080, Default::default()).unwrap());
@@ -19,7 +19,7 @@ fn main() {
     read_req.set_key("pi".to_owned());
     let read_resp = client.read(&read_req);
     match read_resp {
-        Err(e) => panic!("Client3 panic {:?}", e),
-        Ok(_read_response) => println!("Client3 read"),
+        Err(e) => error!("Client3 panic {:?}", e),
+        Ok(_read_response) => info!("Client3 read"),
     }
 }

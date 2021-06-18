@@ -1,5 +1,6 @@
 //use protoc_rust_grpc;
 use protoc_grpcio;
+use log::info;
 
 fn main() {
     // protoc_rust_grpc::Codegen::new()
@@ -10,7 +11,7 @@ fn main() {
     // .expect("error compiling protocol buffer");
     let proto_root = "";
     let output = "src/lib";
-    println!("cargo:rerun-if-changed={}", proto_root);
+    info!("cargo:rerun-if-changed={}", proto_root);
     protoc_grpcio::compile_grpc_protos(
         &["epaxos.proto"],
         &[proto_root],

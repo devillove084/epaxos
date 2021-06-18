@@ -1,0 +1,18 @@
+pub const SLOW_QUORUM: usize = 3; // F + 1
+pub const FAST_QUORUM: usize = 3; // F + floor(F + 1 / 2)
+pub const REPLICAS_NUM: usize = 5;
+pub const LOCALHOST: &str = "127.0.0.1";
+// pub const VA: &str = "127.0.0.1";
+// pub const NORCA: &str = "127.0.0.1";
+// pub const OR: &str = "127.0.0.1";
+// pub const JP: &str = "127.0.0.1";
+// pub const EU: &str = "127.0.0.1";
+
+// Local test
+pub const REPLICA_PORT_1: &str = "10001";
+pub const REPLICA_PORT_2: &str = "10002";
+pub const REPLICA_PORT_3: &str = "10003";
+pub const REPLICA_PORT_4: &str = "10004";
+pub const REPLICA_PORT_5: &str = "10005";
+// Make host for test in different areas
+pub static REPLICA_ADDRESSES: [&str; REPLICAS_NUM] = [VA, JP, NORCA, OR, EU];
