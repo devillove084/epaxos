@@ -1,6 +1,6 @@
 use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
 
-use log::info;
+use crate::config::REPLICAS_NUM;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
@@ -26,11 +26,12 @@ pub struct ReadResponse {
     pub value: i32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum State {
     PreAccepted,
     Accepted,
     Committed,
+    Executed,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +96,8 @@ pub struct EpaxosLogic {
     pub id: ReplicaId,
     pub cmds: Vec<HashMap<usize, LogEntry>>,
     pub instance_number: u32,
+    pub index: usize,
+    pub lowlink: usize,
 }
 
 impl EpaxosLogic {
@@ -104,11 +107,13 @@ impl EpaxosLogic {
             id: id,
             cmds: commands,
             instance_number: 0,
+            index: 0,
+            lowlink: 0,
         }
     }
 
     pub fn update_log(&mut self, log_entry: LogEntry, instance: &Instance) {
-        info!("updating log..");
+        println!("updating log..");
         self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
     }
 
@@ -154,7 +159,7 @@ impl EpaxosLogic {
             if seq == payload.seq && deps == payload.deps {
                 continue;
             } else {
-                info!("Got some dissenting voice: {:#?}", pre_accept_ok.deps);
+                println!("Got some dissenting voice: {:#?}", pre_accept_ok.deps);
                 // Union deps from all replies
                 let new_deps = self.union_deps(new_payload.deps, pre_accept_ok.deps);
                 new_payload.deps = new_deps.clone();
@@ -231,7 +236,7 @@ impl EpaxosLogic {
             instance,
         } = pre_accept_req.0;
         let WriteRequest { key, value } = write_req.clone();
-        info!("Processing PreAccept for key: {}, value: {}", key, value);
+        println!("Processing PreAccept for key: {}, value: {}", key, value);
         let interf = self.find_interference(&key);
         let seq_ = cmp::max(seq, 1 + self.find_max_seq(&interf));
         if interf != deps {
@@ -253,7 +258,7 @@ impl EpaxosLogic {
         })
     }
     pub fn accept_(&mut self, accept_req: Accept) -> AcceptOK {
-        info!("=======ACCEPT========");
+        println!("=======ACCEPT========");
         let Payload {
             write_req,
             seq,
@@ -290,7 +295,7 @@ impl EpaxosLogic {
         };
         // Update the state in the log to commit
         self.update_log(log_entry, &instance);
-        info!("Committed. My log is {:#?}", self.cmds);
+        println!("Committed. My log is {:#?}", self.cmds);
     }
 
     fn find_interference(&self, key: &String) -> Vec<Instance> {
@@ -347,6 +352,7 @@ impl fmt::Debug for State {
             State::PreAccepted => write!(f, "PreAccepted"),
             State::Accepted => write!(f, "Accepted"),
             State::Committed => write!(f, "Committed"),
+            State::Executed => write!(f, "Executed"),
         }
     }
 }

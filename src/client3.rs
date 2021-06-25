@@ -3,12 +3,12 @@ use grpcio::EnvBuilder;
 use sharedlib::epaxos::*;
 use sharedlib::epaxos_grpc::*;
 use std::sync::Arc;
-use log::{info, trace, warn, error};
+use log::{info,error};
 
 fn main() {
     //let grpc_client = Arc::new(grpc::Client::new_plain("127.0.0.1", 8080, Default::default()).unwrap());
     let env = Arc::new(EnvBuilder::new().build());
-    let ch = ChannelBuilder::new(env).connect("127.0.0.1:10000");
+    let ch = ChannelBuilder::new(env).connect("127.0.0.1:10003");
     let client = EpaxosServiceClient::new(ch);
     // let mut write_req = WriteRequest::new();
     // write_req.set_key("pi".to_owned());
@@ -17,9 +17,10 @@ fn main() {
     // println!("Client3 wrote {:?}", write_resp.wait());
     let mut read_req = ReadRequest::new();
     read_req.set_key("pi".to_owned());
-    let read_resp = client.read(&read_req);
+    let read_resp = client.read_async(&read_req);
     match read_resp {
         Err(e) => error!("Client3 panic {:?}", e),
         Ok(_read_response) => info!("Client3 read"),
     }
+    println!("Client 3");
 }

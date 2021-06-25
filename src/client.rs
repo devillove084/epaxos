@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
 use grpcio::{ChannelBuilder, EnvBuilder};
-use log::info;
+//use log::info;
 use rayon::prelude::*;
 use sharedlib::epaxos_grpc::*;
 use sharedlib::logic::{WriteRequest};
@@ -21,10 +21,10 @@ fn main() {
         .enumerate()
         .for_each(|(i, (req, id))| {
             let env = Arc::new(EnvBuilder::new().build());
-            let ch = ChannelBuilder::new(env).connect("127.0.0.1:10000");
+            let ch = ChannelBuilder::new(env).connect("127.0.0.1:10001");
             let client = EpaxosServiceClient::new(ch);
             let start = Instant::now();
-            let r = client.write(req);
+            let r = client.write_async(req);
             // match res.wait() {
             //     Err(e) => panic!("Write Failed: {}", e),
             //     Ok((_, _, _)) => {
@@ -36,8 +36,9 @@ fn main() {
                 Err(e) => panic!("Write Failed: {}", e),
                 Ok(_write_response) => {
                     let duration = start.elapsed();
-                    info!("{} Commit Latency: {:?}", i, duration);
+                    println!("{} Commit Latency: {:?}", i, duration);
                 }
             }
         });
+    println!("client 1 done!!");
 }
