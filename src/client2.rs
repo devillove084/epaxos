@@ -10,7 +10,7 @@ fn main() {
     //let grpc_client = Arc::new(grpc::Client::new_plain(EU, REPLICA_PORT, Default::default()).unwrap());
     //let grpc_client = Arc::new(grpc::ClientBuilder::new("127.0.0.1",REPLICA_PORT,).build().unwrap());
     let env = Arc::new(Environment::new(1));
-    let ch = ChannelBuilder::new(env).connect("127.0.0.1:10001");
+    let ch = ChannelBuilder::new(env).connect("127.0.0.1:10000");
     let client = EpaxosServiceClient::new(ch);
     //let client = EpaxosServiceClient::with_client(grpc_client);
     let mut write_req = WriteRequest::new();

@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::{env, thread};
 
 //use log::{info, warn, error};
-use crossbeam::thread as crossbeam_thread;
+//use crossbeam::thread as crossbeam_thread;
 use grpcio::{ChannelBuilder, Environment, UnarySink};
-use sharedlib::config::{REPLICAS_NUM, REPLICA_ADDRESSES, REPLICA_PORTS, SLOW_QUORUM};
+use sharedlib::config::{REPLICAS_NUM, REPLICA_PORTS, SLOW_QUORUM};
 use sharedlib::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadResponse, WriteResponse};
 use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
 use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept,ReplicaId,WriteRequest};
@@ -47,10 +47,10 @@ impl EpaxosServerInner {
                 //let addr = format!("127.0.0.1:{}", REPLICA_PORTS[i]).as_str();
                 let mut addr = "127.0.0.1:".to_string();
                 addr.push_str(REPLICA_PORTS[i]);
-                println!("{}", addr);
+                //println!("{}", addr);
                 //println!("{}", format!("127.0.0.1:{}", REPLICA_PORTS[i]));
                 let ch = ChannelBuilder::new(env).connect(&addr);
-                println!(">> Neighbor replica {} created",i);
+                //println!(">> Neighbor replica {} created",i);
                 let replica = EpaxosServiceClient::new(ch);
                 replicas.insert(ReplicaId(i as u32), replica);
             }
@@ -97,22 +97,35 @@ impl EpaxosServerInner {
         let mut pre_accept_oks = Vec::new();
         for replica_id in self.quorum_members.iter() {
             //println!("Sending PreAccept to {:?}", replica_id);
-            crossbeam_thread::scope(|s| {
-                s.spawn(|_| async {
-                    let pre_accept_ok = self.replicas
-                    .get(replica_id)
-                    .unwrap()
-                    .pre_accept_async(&payload.to_grpc());
-                    let value = pre_accept_ok.unwrap().await;
-                    match value {
-                        Err(e) => panic!("[PreAccept Stage] Replica panic"),
-                        Ok(_payload) => {
-                            pre_accept_oks.push(Payload::from_grpc(&_payload));
-                        },
-                    }
-                });
-            })
-            .unwrap();
+            // crossbeam_thread::scope(|s| {
+            //     s.spawn(|_| async {
+            //         let pre_accept_ok = self.replicas
+            //         .get(replica_id)
+            //         .unwrap()
+            //         .pre_accept_async(&payload.to_grpc());
+            //         let value = pre_accept_ok.unwrap().await;
+            //         match value {
+            //             Err(e) => panic!("[PreAccept Stage] Replica panic"),
+            //             Ok(_payload) => {
+            //                 pre_accept_oks.push(Payload::from_grpc(&_payload));
+            //             },
+            //         }
+            //     });
+            // })
+            // .unwrap();
+            smol::block_on(async {
+                let pre_accept_ok = self.replicas
+                .get(replica_id)
+                .unwrap()
+                .pre_accept_async(&payload.to_grpc());
+                let value = pre_accept_ok.unwrap().await;
+                match value {
+                    Err(e) => println!("[PreAccept Stage] Replica panic,{:?}", e),
+                    Ok(_payload) => {
+                        pre_accept_oks.push(Payload::from_grpc(&_payload));
+                    },
+                }
+            });
         }
         pre_accept_oks
     }
@@ -120,40 +133,63 @@ impl EpaxosServerInner {
         println!("Send_accept!!");
         let mut accept_ok_count: usize = 1;
         for replica_id in self.quorum_members.iter() {
-            crossbeam_thread::scope(|s| {
-                s.spawn(|_| async{
-                    let accept_ok = self
-                        .replicas
-                        .get(replica_id)
-                        .unwrap()
-                        .accept_async(&payload.to_grpc());
+            // crossbeam_thread::scope(|s| {
+            //     s.spawn(|_| async{
+            //         let accept_ok = self
+            //             .replicas
+            //             .get(replica_id)
+            //             .unwrap()
+            //             .accept_async(&payload.to_grpc());
+            //         match accept_ok.unwrap().await {
+            //             Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
+            //             Ok(_p) => {
+            //                 accept_ok_count += 1;
+            //             }
+            //         }
+            //     });
+            // })
+            // .unwrap();
+
+            smol::block_on(async {
+                let accept_ok = self
+                    .replicas
+                    .get(replica_id)
+                    .unwrap()
+                    .accept_async(&payload.to_grpc());
                     match accept_ok.unwrap().await {
                         Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
                         Ok(_p) => {
                             accept_ok_count += 1;
                         }
                     }
-                });
-            })
-            .unwrap();
+            });
         }
         accept_ok_count
     }
     fn send_commits(&self, payload: &Payload) {
         println!("Send commits");
         for replica_id in self.quorum_members.iter() {
-            crossbeam_thread::scope(|s| {
-                s.spawn(|_| async{
-                    let commit_ok = self.replicas.get(replica_id).unwrap().commit_async(&payload.to_grpc());
-                    //println!("Sending Commit to replica {}", replica_id.0);
-                    let value = commit_ok.unwrap().await;
-                    match value {
-                        Err(e) => panic!("[Commit Stage] Replica panic {:?}", e),
-                        Ok(_payload) => println!("Sending Commit to replica {}", replica_id.0),       
-                    }
-                });
-            })
-            .unwrap();
+            // crossbeam_thread::scope(|s| {
+            //     s.spawn(|_| async{
+            //         let commit_ok = self.replicas.get(replica_id).unwrap().commit_async(&payload.to_grpc());
+            //         //println!("Sending Commit to replica {}", replica_id.0);
+            //         let value = commit_ok.unwrap().await;
+            //         match value {
+            //             Err(e) => panic!("[Commit Stage] Replica panic {:?}", e),
+            //             Ok(_payload) => println!("Sending Commit to replica {}", replica_id.0),       
+            //         }
+            //     });
+            // })
+            // .unwrap();
+            smol::block_on(async {
+                let commit_ok = self.replicas.get(replica_id).unwrap().commit_async(&payload.to_grpc());
+                //println!("Sending Commit to replica {}", replica_id.0);
+                let value = commit_ok.unwrap().await;
+                match value {
+                    Err(e) => panic!("[Commit Stage] Replica panic {:?}", e),
+                    Ok(_payload) => println!("Sending Commit to replica {}", replica_id.0),       
+                }
+            });
         }
     }
 
@@ -284,7 +320,7 @@ fn main() {
 
     let mut fake_server = grpcio::ServerBuilder::new(Arc::new(Environment::new(1)))
                                     .register_service(service)
-                                    .bind("127.0.0.1", 10000)
+                                    .bind("127.0.0.1", 10002)
                                     .build()
                                     .expect("Failed to build epaxos server");
 
