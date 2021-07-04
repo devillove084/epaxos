@@ -1,0 +1,15 @@
+[package]
+name = "client"
+version = "0.1.0"
+authors = ["luhuanbing084@gmail.com"]
+license = "MIT"
+description = "A Rust implementation of EPaxos"
+edition = "2018"
+keywords = ["Paxos", "EPaxos"]
+categories = ["RSM"]
+
+[dependencies]
+server = {path = "../server"}
+grpcio = { version = "0.9.0", default-features = false, features = ["protobuf-codec", "use-bindgen"] }
+smol = "1.2.5"
+log = "0.4.14"

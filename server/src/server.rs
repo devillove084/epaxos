@@ -168,11 +168,6 @@ impl EpaxosService for EpaxosServerImpl {
                 println!("Consensus failed. Notifying client.");
                 r.set_commit(false);
             }
-            // let result = sink.success(r).await;
-            // match result {
-            //     Err(e) => panic!("Something wrong in final write{}, ", e),
-            //     Ok(()) => println!("Write complete"),
-            // }
             Ok(r)
         };
         
@@ -243,39 +238,21 @@ impl EpaxosService for EpaxosServerImpl {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let ip = &args[1];
+    let port: u16= args[2].parse().unwrap();
+    let id: u32 = args[3].parse().unwrap();
+    let r1: u32 = args[4].parse().unwrap();
+    let r2: u32 = args[5].parse().unwrap();
 
-    let id: u32 = args[1].parse().unwrap();
-    let r1: u32 = args[2].parse().unwrap();
-    let r2: u32 = args[3].parse().unwrap();
-
-    // // let mut server_builder1 = grpc::ServerBuilder::new_plain();
-    // // server_builder1.add_service(EpaxosServiceServer::new_service_def(EpaxosServer::init(
-    // //     ReplicaId(1),
-    // //     vec![ReplicaId(2), ReplicaId(3)],
-    // // )));
-    // let mut server = grpcio::ServerBuilder::new(env);
-    // server_builder1.http.set_port(REPLICA_PORT);
-    // let server1 = server_builder1.build().expect("build");
-    // println!(">> Me {}", server1.local_addr());
-
-    
-    //let env = Arc::new(Environment::new(id as usize));
-    //let ch = ChannelBuilder::new(env).connect(&(String::from(REPLICA_ADDRESSES[i as usize]) + &String::from(REPLICA_PORT)));
     let nn = EpaxosServerImpl::init(ReplicaId(id), vec![ReplicaId(r1), ReplicaId(r2)],);
     let service = sharedlib::epaxos_grpc::create_epaxos_service(nn);
-    // let server_build = grpcio::ServerBuilder::new(env).register_service(service);
-    // //.bind("127.0.0.1", 10000).build().unwrap();
-    // let pre = server_build.bind("127.0.0.1", 10001).build().unwrap();
-    
-
-    let mut fake_server = grpcio::ServerBuilder::new(Arc::new(Environment::new(1)))
+    let mut server = grpcio::ServerBuilder::new(Arc::new(Environment::new(1)))
                                     .register_service(service)
-                                    .bind("127.0.0.1", 10002)
+                                    .bind(ip, port)
                                     .build()
                                     .expect("Failed to build epaxos server");
 
-    //pre.start();
-    fake_server.start();
+    server.start();
     println!("Server start!!!");
     // Blocks the main thread forever
     loop {
