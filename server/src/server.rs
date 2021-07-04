@@ -99,7 +99,6 @@ impl EpaxosServerInner {
                 .unwrap_or_else(|e| {
                     panic!("Panic on unwrap pre_accept,{}", e);
                 });
-                println!("HHHHH{:?}", replica_id);
                 let value = pre_accept_ok.await;
                 match value {
                     Err(e) => panic!("[PreAccept Stage] Replica panic,{:?}", e),

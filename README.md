@@ -2,20 +2,16 @@
 
 ## 代码结构
 
-> ├── Cargo.toml 
-> ├── **client** 
-> │  ├── Cargo.toml 
-> │  └── **src** 
-> ├── README.md 
-> ├── **server** 
-> │  ├── build.rs 
-> │  ├── Cargo.toml 
-> │  ├── epaxos.proto 
-> │  └── **src** 
-> └── **tests**
-
 * client是对EPaxos集群的使用，展示了如何使用异步的方式来构建Read/Write;
 * server是整个集群的一个Replica节点，构建集群。
+
+
+
+## Features
+
+1. 使用grpcio(PingCAP)构建，异步支持明确;
+2. 使用smol构建内部异步函数，异步覆盖完善;
+3. ……
 
 
 
@@ -36,3 +32,12 @@
 这里稍微解释一下参数，server的前面两个参数为replica绑定的ip&&port，后面的三个参数第一个参数为自己的id，后面两个为要去链接的replicaID。
 
 client的参数为要链接的目标，这里填三个中的任何一个即可。
+
+## 下一步工作
+
+1. 补全Execute逻辑;
+2. 考虑使用并发数据结构，替代现在的hashmap;
+3. 构建动态添加或者删除节点逻辑;
+4. 使用BoltDB替代现有的简单逻辑;
+5. Fail recovery;
+6. …….
