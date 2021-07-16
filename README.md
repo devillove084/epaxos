@@ -41,6 +41,6 @@ client的参数为要链接的目标，这里填三个中的任何一个即可�
 2. Epoch(翻译成版本，或者世代)
 3. MemberShip Change；
 4. Failover Revovery；
-5. Log存储重新设计，内存数据结构，已经Flush Executed log on disk;
+5. Log存储重新设计，内存数据结构&&Flush Executed log on disk;
 6. 将WriteRequest重新设计为trait，可以暴露为接口自定义请求；
 7. …….
