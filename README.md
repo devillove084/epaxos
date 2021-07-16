@@ -11,7 +11,9 @@
 
 1. 使用grpcio(PingCAP)构建，异步支持明确;
 2. 使用smol构建内部异步函数，异步覆盖完善;
-3. ……
+3. 替原作者补全Commit逻辑；
+4. 使用Tarjan算法补全Execute逻辑(Experiment)
+5. 构建测试代码
 
 
 
@@ -35,9 +37,10 @@ client的参数为要链接的目标，这里填三个中的任何一个即可�
 
 ## 下一步工作
 
-1. 补全Execute逻辑;
 2. 考虑使用并发数据结构，替代现在的hashmap;
-3. 构建动态添加或者删除节点逻辑;
-4. 使用BoltDB替代现有的简单逻辑;
-5. Fail recovery;
-6. …….
+2. Epoch(翻译成版本，或者世代)
+3. MemberShip Change；
+4. Failover Revovery；
+5. Log存储重新设计，内存数据结构，已经Flush Executed log on disk;
+6. 将WriteRequest重新设计为trait，可以暴露为接口自定义请求；
+7. …….

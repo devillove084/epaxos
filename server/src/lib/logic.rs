@@ -1,6 +1,6 @@
 use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
 
-use crate::config::REPLICAS_NUM;
+use crate::{config::REPLICAS_NUM, execute::{Executor, TarjanNode}};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
@@ -10,6 +10,8 @@ pub struct WriteRequest {
     pub key: String,
     pub value: i32,
 }
+
+// TODO: Quest(...) to trait
 
 #[derive(Clone, Copy)]
 pub struct WriteResponse {
@@ -52,13 +54,15 @@ pub struct AcceptOKPayload {
 pub struct LogEntry {
     pub key: String,
     pub value: i32,
+    // Put WriteRequest into logentry
     pub seq: u32,
     pub deps: Vec<Instance>,
     pub state: State,
 }
 
-#[derive(Clone, PartialEq, Copy)]
+#[derive(Clone, PartialEq, Copy, Eq, Hash, PartialOrd)]
 pub struct Instance {
+    //TODO:epoch
     pub replica: u32,
     pub slot: u32,
 }
@@ -96,25 +100,53 @@ pub struct EpaxosLogic {
     pub id: ReplicaId,
     pub cmds: Vec<HashMap<usize, LogEntry>>,
     pub instance_number: u32,
-    pub index: usize,
-    pub lowlink: usize,
+    pub commited_inst: Vec<Instance>, //Set TODO
+    pub exec: Executor,
 }
 
 impl EpaxosLogic {
     pub fn init(id: ReplicaId) -> EpaxosLogic {
         let commands = vec![HashMap::new(); REPLICAS_NUM];
         EpaxosLogic {
-            id: id,
+            id,
             cmds: commands,
             instance_number: 0,
-            index: 0,
-            lowlink: 0,
+            commited_inst: Vec::new(),
+            exec: Executor::new(Instance{replica: 0, slot: 0}),
         }
     }
 
     pub fn update_log(&mut self, log_entry: LogEntry, instance: &Instance) {
-        println!("updating log..");
-        self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+        println!("updating log.."); 
+        match log_entry.state {
+            State::Committed => {
+                //let deps = &self.cmds[instance.replica as usize].get(&(instance.slot as usize)).unwrap().deps;
+                let deps = log_entry.deps;
+                for dep in deps.iter() {
+                    self.commited_inst.push(*dep);
+                }
+                self.execute(*instance, deps);
+                //let graph = self.make_graph(*instance,deps.to_vec());
+            
+            },
+            _ => {
+                self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+            }
+        }
+        //self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+        //TODO: Flush executed logs to disks
+
+    }
+
+    pub fn execute(&mut self, instance: Instance, deps: Vec<Instance>) {
+        let mut exec = self.exec.make_executor(instance, self.id.0, self.cmds.clone());
+        let node = TarjanNode::new(instance, self.id.0, self.cmds.clone());
+        let mut node_deps = Vec::new();
+        for inst in deps.iter() {
+            node_deps.push(TarjanNode::new(*inst, self.id.0, self.cmds.clone()));
+        }
+
+        exec.run(node, node_deps);
     }
 
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {
@@ -136,12 +168,12 @@ impl EpaxosLogic {
             },
         );
         Payload {
-            write_req: write_req,
-            seq: seq,
+            write_req,
+            seq,
             deps: interf,
             instance: Instance {
                 replica: self.id.0,
-                slot: slot,
+                slot,
             },
         }
     }

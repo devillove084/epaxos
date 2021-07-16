@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 #![allow(incomplete_features)]
 #![feature(impl_trait_in_bindings)]
+#![feature(let_chains)]
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -148,12 +149,22 @@ impl EpaxosServerInner {
 
     fn execute(&self) {
         println!("Executing");
+        let epaxos_logic = self.epaxos_logic.lock().unwrap();
+        for replica_id in self.quorum_members.iter() {
+            let cmd = &epaxos_logic.cmds;
+            for map in cmd.iter() {
+                for (slot, log) in map.iter() {
+                    println!("The slot is{:?}", slot);
+                    println!("+++++++");
+                    println!("The log is{:?}", log);
+                }
+            }
+        }
     }
 }
 
 impl EpaxosService for EpaxosServerImpl {
     fn write(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::WriteRequest, sink: ::grpcio::UnarySink<WriteResponse>) {
-        println!("write");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             let mut r = grpc_service::WriteResponse::new();
@@ -171,6 +182,7 @@ impl EpaxosService for EpaxosServerImpl {
         };
         
         sharedlib::util::spawn_grpc_task(sink, task);
+
     }
 
     fn read(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::ReadRequest, sink: ::grpcio::UnarySink<ReadResponse>) {
@@ -178,6 +190,7 @@ impl EpaxosService for EpaxosServerImpl {
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             println!("Received a read request with key = {}", req.get_key());
+            println!("Start execute!!!");
             self_inner.execute();
             let mut r = grpc_service::ReadResponse::new();
             //r.set_value(*((*self_inner.store.lock().unwrap()).get(req.get_key())).unwrap());
