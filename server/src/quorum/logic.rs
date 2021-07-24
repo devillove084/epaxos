@@ -1,6 +1,6 @@
 use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
 
-use crate::{config::REPLICAS_NUM, execute::{Executor, TarjanNode}};
+use super::{config::REPLICAS_NUM, execute::{Executor, TarjanNode}};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
@@ -11,8 +11,9 @@ pub struct WriteRequest {
     pub value: i32,
 }
 
-// TODO: Quest(...) to trait
-
+// TODO: If you want to expose a public interface to different types of requests, 
+// then it must be based on a "virtual base class" to achieve this effect, 
+// and a public interface for different external read requests or write requests.
 #[derive(Clone, Copy)]
 pub struct WriteResponse {
     pub commit: bool,
@@ -52,9 +53,9 @@ pub struct AcceptOKPayload {
 
 #[derive(Clone)]
 pub struct LogEntry {
+    //TODO：It is best not to expose the specific structure of kv here.
     pub key: String,
     pub value: i32,
-    // Put WriteRequest into logentry
     pub seq: u32,
     pub deps: Vec<Instance>,
     pub state: State,
@@ -62,7 +63,9 @@ pub struct LogEntry {
 
 #[derive(Clone, PartialEq, Copy, Eq, Hash, PartialOrd)]
 pub struct Instance {
-    //TODO:epoch
+    //TODO:In each epoch, there is a different instance version, 
+    // so before implementing the membership change, 
+    //the epoch mechanism needs to be implemented first
     pub replica: u32,
     pub slot: u32,
 }
@@ -120,14 +123,11 @@ impl EpaxosLogic {
         println!("updating log.."); 
         match log_entry.state {
             State::Committed => {
-                //let deps = &self.cmds[instance.replica as usize].get(&(instance.slot as usize)).unwrap().deps;
                 let deps = log_entry.deps;
                 for dep in deps.iter() {
                     self.commited_inst.push(*dep);
                 }
-                self.execute(*instance, deps);
-                //let graph = self.make_graph(*instance,deps.to_vec());
-            
+                self.execute(*instance, deps);            
             },
             _ => {
                 self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);

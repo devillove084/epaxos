@@ -1,6 +1,6 @@
 use std::{cmp::{self, Ordering}, collections::HashMap};
 
-use crate::logic::{Instance, LogEntry, State};
+use super::logic::{Instance, LogEntry, State};
 
 #[derive(Debug, Clone)]
 pub struct TarjanNode {
@@ -100,12 +100,14 @@ impl Executor {
         e
     }
 
+    // Real run Scc function.
     pub fn run(&mut self, node: TarjanNode, node_dep: Vec<TarjanNode>) {
         let comps = self.strong_connect_tarjan(&mut node.clone(), &mut node_dep.clone()).to_owned();
         for comp in comps.iter() {
             self.execute_scc(&mut comp.to_vec());
         }
         self.reset();
+        
     }
 
     pub fn strong_connect_tarjan(
@@ -116,9 +118,8 @@ impl Executor {
         let dep_map = &self.cmds[self.instance.replica as usize];
         let mut real_dep = Vec::new();
         for n in node_dep.clone().iter_mut() {
-            // 遍历目前节点的依赖
             let dep = &dep_map.get(&(node.instance.slot as usize)).unwrap().deps;
-            real_dep.append(&mut n.get_dep(dep.to_vec(), self.replica_id, &self.cmds)); // 找到并构造依赖节点的依赖
+            real_dep.append(&mut n.get_dep(dep.to_vec(), self.replica_id, &self.cmds));
             for d in real_dep.iter_mut() {
                 match self.vertices.get(&(d.instance.slot as usize)) {
                     Some(deps) => {
@@ -131,7 +132,6 @@ impl Executor {
             }
         }
 
-        //let mut comp = Vec::new();
         for node in node_dep.iter_mut() {
             if !node.visited() {
                 self.visit(node);
@@ -142,13 +142,11 @@ impl Executor {
 
     pub fn visit(&mut self,  node: &mut TarjanNode) {
         let mut deps = self.vertices.get_mut(&(node.instance.slot as usize)).unwrap().to_owned();
-
         node.index = self.index;
         node.low_link = self.index;
         self.index += 1;
         node.on_stack = false;
         self.stack.push(node.clone());
-
         
         for dep in deps.iter_mut() {
             if !dep.visited() {
@@ -205,7 +203,7 @@ impl Executor {
 
                 let log =  self.cmds[d.replica as usize].get(&(d.slot as usize)).unwrap();
                 if log.state == State::Executed {
-                    return;
+                    break;
                 }
             }
         }
@@ -214,7 +212,8 @@ impl Executor {
             self.real_execute(v.clone());
         }
     }
-    pub fn real_execute(&mut self, node: TarjanNode) {
+
+    fn real_execute(&mut self, node: TarjanNode) {
         println!("Do the real node{}", node.seq);
     }
 

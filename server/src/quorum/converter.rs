@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
-use crate::epaxos as grpc;
-use crate::logic::*;
+use super::epaxos as grpc;
+use super::logic::*;
 
 impl WriteRequest {
     pub fn from_grpc(req: &grpc::WriteRequest) -> Self {
@@ -68,7 +68,6 @@ impl Payload {
     }
 
     pub fn to_grpc(&self) -> grpc::Payload {
-        //println!("[Payyload to grpc] self = {:?}", self);
         let mut payload = grpc::Payload::new();
         payload.set_write_req(self.write_req.to_grpc());
         payload.set_seq(self.seq);
@@ -76,7 +75,6 @@ impl Payload {
             self.deps.iter().map(|dep| dep.to_grpc()).collect(),
         ));
         payload.set_instance(Instance::to_grpc(&self.instance));
-        //println!("[Payyload to grpc] converted payload = {:?}", payload);
         payload
     }
 }
@@ -106,11 +104,9 @@ impl Instance {
     }
 
     pub fn to_grpc(&self) -> grpc::Instance {
-        //println!("[instance] self = {:?}", self);
         let mut instance = grpc::Instance::new();
         instance.set_replica(self.replica);
         instance.set_slot(self.slot);
-        // println!("[instance] converted instance = {:?}", instance);
         instance
     }
 }

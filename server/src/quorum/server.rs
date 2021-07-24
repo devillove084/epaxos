@@ -1,32 +1,28 @@
 #![allow(unused_variables)]
 #![allow(incomplete_features)]
-#![feature(impl_trait_in_bindings)]
-#![feature(let_chains)]
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::{env, thread};
 
 //use log::{info, warn, error};
-//use crossbeam::thread as crossbeam_thread;
 use grpcio::{ChannelBuilder, Environment, UnarySink};
-use sharedlib::config::{REPLICAS_NUM, REPLICA_TEST, SLOW_QUORUM};
-use sharedlib::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadResponse, WriteResponse};
-use sharedlib::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
-use sharedlib::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept,ReplicaId,WriteRequest};
+use super::config::{REPLICAS_NUM, REPLICA_TEST, SLOW_QUORUM};
+use super::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadResponse, WriteResponse};
+use super::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
+use super::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept,ReplicaId,WriteRequest};
 
 #[derive(Clone)]
-struct EpaxosServerImpl {
-    inner: Arc<EpaxosServerInner>,
+pub struct EpaxosServerImpl {
+    pub inner: Arc<EpaxosServerInner>,
 }
 
-struct EpaxosServerInner {
+pub struct EpaxosServerInner {
     // In grpc, parameters in service are immutable.
     // See https://github.com/stepancheg/grpc-rust/blob/master/docs/FAQ.md
-    store: Arc<Mutex<HashMap<String, i32>>>,
-    epaxos_logic: Arc<Mutex<EpaxosLogic>>,
-    replicas: HashMap<ReplicaId, EpaxosServiceClient>,
-    quorum_members: Vec<ReplicaId>,
+    pub store: Arc<Mutex<HashMap<String, i32>>>,
+    pub epaxos_logic: Arc<Mutex<EpaxosLogic>>,
+    pub replicas: HashMap<ReplicaId, EpaxosServiceClient>,
+    pub quorum_members: Vec<ReplicaId>,
 }
 
 impl EpaxosServerImpl {
@@ -164,7 +160,7 @@ impl EpaxosServerInner {
 }
 
 impl EpaxosService for EpaxosServerImpl {
-    fn write(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::WriteRequest, sink: ::grpcio::UnarySink<WriteResponse>) {
+    fn write(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::WriteRequest, sink: ::grpcio::UnarySink<WriteResponse>) {
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             let mut r = grpc_service::WriteResponse::new();
@@ -181,11 +177,11 @@ impl EpaxosService for EpaxosServerImpl {
             Ok(r)
         };
         
-        sharedlib::util::spawn_grpc_task(sink, task);
+        super::util::spawn_grpc_task(sink, task);
 
     }
 
-    fn read(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::ReadRequest, sink: ::grpcio::UnarySink<ReadResponse>) {
+    fn read(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::ReadRequest, sink: ::grpcio::UnarySink<ReadResponse>) {
         println!("read");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
@@ -207,10 +203,10 @@ impl EpaxosService for EpaxosServerImpl {
             }
             Ok(r)
         };
-        sharedlib::util::spawn_grpc_task(sink, task);
+        super::util::spawn_grpc_task(sink, task);
     }
 
-    fn pre_accept(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::Payload, sink: UnarySink<sharedlib::epaxos::Payload>) {
+    fn pre_accept(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::Payload, sink: UnarySink<super::epaxos::Payload>) {
         println!("Received PreAccept");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
@@ -219,10 +215,10 @@ impl EpaxosService for EpaxosServerImpl {
             let r = epaxos_logic.pre_accept_(request);
             Ok(r.0.to_grpc())
         };
-        sharedlib::util::spawn_grpc_task(sink, task);        
+        super::util::spawn_grpc_task(sink, task);        
     }
 
-    fn accept(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::Payload, sink: ::grpcio::UnarySink<AcceptOKPayload>) {
+    fn accept(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::Payload, sink: ::grpcio::UnarySink<AcceptOKPayload>) {
         println!("Accept");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
@@ -231,10 +227,10 @@ impl EpaxosService for EpaxosServerImpl {
             let r = epaxos_logic.accept_(request);
             Ok(r.0.to_grpc())
         };
-        sharedlib::util::spawn_grpc_task(sink, task);
+        super::util::spawn_grpc_task(sink, task);
     }
 
-    fn commit(&mut self, ctx: ::grpcio::RpcContext, req: sharedlib::epaxos::Payload, sink: ::grpcio::UnarySink<Empty>) {
+    fn commit(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::Payload, sink: ::grpcio::UnarySink<Empty>) {
         println!("Commit");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
@@ -244,30 +240,8 @@ impl EpaxosService for EpaxosServerImpl {
             let r = Empty::new();
             Ok(r)
         };
-        sharedlib::util::spawn_grpc_task(sink, task);
+        super::util::spawn_grpc_task(sink, task);
     }
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    let ip = &args[1];
-    let port: u16= args[2].parse().unwrap();
-    let id: u32 = args[3].parse().unwrap();
-    let r1: u32 = args[4].parse().unwrap();
-    let r2: u32 = args[5].parse().unwrap();
 
-    let nn = EpaxosServerImpl::init(ReplicaId(id), vec![ReplicaId(r1), ReplicaId(r2)],);
-    let service = sharedlib::epaxos_grpc::create_epaxos_service(nn);
-    let mut server = grpcio::ServerBuilder::new(Arc::new(Environment::new(1)))
-                                    .register_service(service)
-                                    .bind(ip, port)
-                                    .build()
-                                    .expect("Failed to build epaxos server");
-
-    server.start();
-    println!("Server start!!!");
-    // Blocks the main thread forever
-    loop {
-        thread::park();
-    }
-}
