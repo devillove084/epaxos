@@ -1,6 +1,6 @@
 use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
 
-use super::{config::REPLICAS_NUM, execute::{Executor, TarjanNode}};
+use super::{config::REPLICAS_NUM, execute::Executor};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
@@ -103,8 +103,6 @@ pub struct EpaxosLogic {
     pub id: ReplicaId,
     pub cmds: Vec<HashMap<usize, LogEntry>>,
     pub instance_number: u32,
-    pub commited_inst: Vec<Instance>, //Set TODO
-    pub exec: Executor,
 }
 
 impl EpaxosLogic {
@@ -114,39 +112,33 @@ impl EpaxosLogic {
             id,
             cmds: commands,
             instance_number: 0,
-            commited_inst: Vec::new(),
-            exec: Executor::new(Instance{replica: 0, slot: 0}),
         }
     }
 
     pub fn update_log(&mut self, log_entry: LogEntry, instance: &Instance) {
         println!("updating log.."); 
-        match log_entry.state {
-            State::Committed => {
-                let deps = log_entry.deps;
-                for dep in deps.iter() {
-                    self.commited_inst.push(*dep);
-                }
-                self.execute(*instance, deps);            
-            },
-            _ => {
-                self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
-            }
-        }
-        //self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+        self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
         //TODO: Flush executed logs to disks
 
     }
 
-    pub fn execute(&mut self, instance: Instance, deps: Vec<Instance>) {
-        let mut exec = self.exec.make_executor(instance, self.id.0, self.cmds.clone());
-        let node = TarjanNode::new(instance, self.id.0, self.cmds.clone());
-        let mut node_deps = Vec::new();
-        for inst in deps.iter() {
-            node_deps.push(TarjanNode::new(*inst, self.id.0, self.cmds.clone()));
-        }
+    pub fn execute(&mut self) {
+        let inst = Instance{replica: self.id.0, slot: self.instance_number};
+        let mut e = Executor::new(inst);
 
-        exec.run(node, node_deps);
+        let log_entry = self.cmds[inst.replica as usize].get(&(inst.slot as usize));
+        match log_entry {
+            Some(le) => {
+                e.add_exec(inst, le.seq, le.deps.clone());
+            },
+            None => {
+                let mut v_i = Vec::new();
+                v_i.push(inst);
+                e.add_exec(inst, 1, v_i);
+            },
+        }
+        
+        e.run();
     }
 
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {

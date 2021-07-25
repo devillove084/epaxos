@@ -17,8 +17,6 @@ pub struct EpaxosServerImpl {
 }
 
 pub struct EpaxosServerInner {
-    // In grpc, parameters in service are immutable.
-    // See https://github.com/stepancheg/grpc-rust/blob/master/docs/FAQ.md
     pub store: Arc<Mutex<HashMap<String, i32>>>,
     pub epaxos_logic: Arc<Mutex<EpaxosLogic>>,
     pub replicas: HashMap<ReplicaId, EpaxosServiceClient>,
@@ -145,17 +143,8 @@ impl EpaxosServerInner {
 
     fn execute(&self) {
         println!("Executing");
-        let epaxos_logic = self.epaxos_logic.lock().unwrap();
-        for replica_id in self.quorum_members.iter() {
-            let cmd = &epaxos_logic.cmds;
-            for map in cmd.iter() {
-                for (slot, log) in map.iter() {
-                    println!("The slot is{:?}", slot);
-                    println!("+++++++");
-                    println!("The log is{:?}", log);
-                }
-            }
-        }
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        epaxos_logic.execute();
     }
 }
 
@@ -189,17 +178,12 @@ impl EpaxosService for EpaxosServerImpl {
             println!("Start execute!!!");
             self_inner.execute();
             let mut r = grpc_service::ReadResponse::new();
-            //r.set_value(*((*self_inner.store.lock().unwrap()).get(req.get_key())).unwrap());
-            let pp = &*self_inner.store.lock().unwrap();
-            let ss = req.get_key();
-            if ss.is_empty() {
-                println!("Some thing wrong");
-            }
-            let rr = pp.get(ss);
-            if rr.is_none() {
+            let res_set = &*self_inner.store.lock().unwrap();
+            let req_key = req.get_key();
+            if res_set.get(req_key).is_none() {
                 r.set_value(i32::MAX);
             }else {
-                r.set_value(*rr.unwrap());
+                r.set_value(*res_set.get(req_key).unwrap());
             }
             Ok(r)
         };
