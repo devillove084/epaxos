@@ -2,7 +2,6 @@ use futures::Future;
 use grpcio::{RpcStatus, UnarySink};
 use std::{fmt::Error, result::Result};
 
-
 /// `Epaxos` Result type
 pub type EpaxosResult<T> = Result<T, Error>;
 

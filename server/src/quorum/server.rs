@@ -4,12 +4,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-//use log::{info, warn, error};
-use grpcio::{ChannelBuilder, Environment, UnarySink};
 use super::config::{REPLICAS_NUM, REPLICA_TEST, SLOW_QUORUM};
 use super::epaxos::{self as grpc_service, AcceptOKPayload, Empty, ReadResponse, WriteResponse};
 use super::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
-use super::logic::{Accept, Commit, EpaxosLogic, Path, Payload, PreAccept,ReplicaId,WriteRequest};
+use super::logic::{
+    Accept, Commit, EpaxosLogic, Path, Payload, PreAccept, ReplicaId, WriteRequest,
+};
+use grpcio::{ChannelBuilder, Environment, UnarySink};
+use log::{error, info};
 
 #[derive(Clone)]
 pub struct EpaxosServerImpl {
@@ -28,18 +30,18 @@ impl EpaxosServerImpl {
         Self {
             inner: Arc::new(EpaxosServerInner::init(id, quorum_members)),
         }
-    }  
+    }
 }
 
 impl EpaxosServerInner {
     fn init(id: ReplicaId, quorum_members: Vec<ReplicaId>) -> Self {
         let mut replicas = HashMap::new();
-        println!("Initializing Replica {}", id.0);
+        info!("Initializing Replica {}", id.0);
         for i in 0..REPLICAS_NUM {
             if i != id.0 as usize {
                 let env = Arc::new(Environment::new(1));
                 let ch = ChannelBuilder::new(env).connect(REPLICA_TEST[i]);
-                //println!(">> Neighbor replica {} created",i);
+                info!(">> Neighbor replica {} created",i);
                 let replica = EpaxosServiceClient::new(ch);
                 replicas.insert(ReplicaId(i as u32), replica);
             }
@@ -55,7 +57,7 @@ impl EpaxosServerInner {
 
     // we only need to do consensus for write req
     fn consensus(&self, write_req: &WriteRequest) -> bool {
-        println!("Starting consensus");
+        info!("Starting consensus");
         let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
         let payload = epaxos_logic.lead_consensus(write_req.clone());
         let pre_accept_oks = self.send_pre_accepts(&payload);
@@ -82,24 +84,25 @@ impl EpaxosServerInner {
     }
 
     fn send_pre_accepts(&self, payload: &Payload) -> Vec<Payload> {
-        println!("Send_Pre_accepts");
+        info!("Send_Pre_accepts");
         let mut pre_accept_oks = Vec::new();
         for replica_id in self.quorum_members.iter() {
-            //println!("Sending PreAccept to {:?}", replica_id);
+            info!("Sending PreAccept to {:?}", replica_id);
             smol::block_on(async {
-                let pre_accept_ok = self.replicas
-                .get(replica_id)
-                .unwrap()
-                .pre_accept_async(&payload.to_grpc())
-                .unwrap_or_else(|e| {
-                    panic!("Panic on unwrap pre_accept,{}", e);
-                });
+                let pre_accept_ok = self
+                    .replicas
+                    .get(replica_id)
+                    .unwrap()
+                    .pre_accept_async(&payload.to_grpc())
+                    .unwrap_or_else(|e| {
+                        panic!("Panic on unwrap pre_accept,{}", e);
+                    });
                 let value = pre_accept_ok.await;
                 match value {
                     Err(e) => panic!("[PreAccept Stage] Replica panic,{:?}", e),
                     Ok(_payload) => {
                         pre_accept_oks.push(Payload::from_grpc(&_payload));
-                    },
+                    }
                 }
             });
         }
@@ -107,7 +110,7 @@ impl EpaxosServerInner {
     }
 
     fn send_accepts(&self, payload: &Payload) -> usize {
-        println!("Send_accept!!");
+        info!("Send_accept!!");
         let mut accept_ok_count: usize = 1;
         for replica_id in self.quorum_members.iter() {
             smol::block_on(async {
@@ -116,73 +119,85 @@ impl EpaxosServerInner {
                     .get(replica_id)
                     .unwrap()
                     .accept_async(&payload.to_grpc());
-                    match accept_ok.unwrap().await {
-                        Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
-                        Ok(_p) => {
-                            accept_ok_count += 1;
-                        }
+                match accept_ok.unwrap().await {
+                    Err(e) => panic!("[Paxos-Accept Stage] Replica panic {:?}", e),
+                    Ok(_p) => {
+                        accept_ok_count += 1;
                     }
+                }
             });
         }
         accept_ok_count
     }
     fn send_commits(&self, payload: &Payload) {
-        println!("Send commits");
+        info!("Send commits");
         for replica_id in self.quorum_members.iter() {
             smol::block_on(async {
-                let commit_ok = self.replicas.get(replica_id).unwrap().commit_async(&payload.to_grpc());
-                //println!("Sending Commit to replica {}", replica_id.0);
+                let commit_ok = self
+                    .replicas
+                    .get(replica_id)
+                    .unwrap()
+                    .commit_async(&payload.to_grpc());
+                info!("Sending Commit to replica {}", replica_id.0);
                 let value = commit_ok.unwrap().await;
                 match value {
-                    Err(e) => panic!("[Commit Stage] Replica panic {:?}", e),
-                    Ok(_payload) => println!("Sending Commit to replica {}", replica_id.0),       
+                    Err(e) => error!("[Commit Stage] Replica panic {:?}", e),
+                    Ok(_payload) => info!("Sending Commit to replica {}", replica_id.0),
                 }
             });
         }
     }
 
     fn execute(&self) {
-        println!("Executing");
+        info!("Executing");
         let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
         epaxos_logic.execute();
     }
 }
 
 impl EpaxosService for EpaxosServerImpl {
-    fn write(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::WriteRequest, sink: ::grpcio::UnarySink<WriteResponse>) {
+    fn write(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: super::epaxos::WriteRequest,
+        sink: ::grpcio::UnarySink<WriteResponse>,
+    ) {
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             let mut r = grpc_service::WriteResponse::new();
             if self_inner.consensus(&WriteRequest::from_grpc(&req)) {
-                (*self_inner.store.lock().unwrap()).insert(req.get_key().to_owned(), req.get_value());
-                println!("DONE my store: {:#?}", self_inner.store.lock().unwrap());
-                println!("Consensus successful. Sending a commit to client\n\n\n\n.");
+                (*self_inner.store.lock().unwrap())
+                    .insert(req.get_key().to_owned(), req.get_value());
+                info!("DONE my store: {:#?}", self_inner.store.lock().unwrap());
+                info!("Consensus successful. Sending a commit to client\n\n\n\n.");
                 r.set_commit(true);
-    
-            }else {
-                println!("Consensus failed. Notifying client.");
+            } else {
+                info!("Consensus failed. Notifying client.");
                 r.set_commit(false);
             }
             Ok(r)
         };
-        
-        super::util::spawn_grpc_task(sink, task);
 
+        super::util::spawn_grpc_task(sink, task);
     }
 
-    fn read(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::ReadRequest, sink: ::grpcio::UnarySink<ReadResponse>) {
-        println!("read");
+    fn read(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: super::epaxos::ReadRequest,
+        sink: ::grpcio::UnarySink<ReadResponse>,
+    ) {
+        info!("read");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
-            println!("Received a read request with key = {}", req.get_key());
-            println!("Start execute!!!");
+            info!("Received a read request with key = {}", req.get_key());
             self_inner.execute();
             let mut r = grpc_service::ReadResponse::new();
             let res_set = &*self_inner.store.lock().unwrap();
             let req_key = req.get_key();
             if res_set.get(req_key).is_none() {
                 r.set_value(i32::MAX);
-            }else {
+            } else {
                 r.set_value(*res_set.get(req_key).unwrap());
             }
             Ok(r)
@@ -190,8 +205,13 @@ impl EpaxosService for EpaxosServerImpl {
         super::util::spawn_grpc_task(sink, task);
     }
 
-    fn pre_accept(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::Payload, sink: UnarySink<super::epaxos::Payload>) {
-        println!("Received PreAccept");
+    fn pre_accept(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: super::epaxos::Payload,
+        sink: UnarySink<super::epaxos::Payload>,
+    ) {
+        info!("Received PreAccept");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             let mut epaxos_logic = self_inner.epaxos_logic.lock().unwrap();
@@ -199,11 +219,16 @@ impl EpaxosService for EpaxosServerImpl {
             let r = epaxos_logic.pre_accept_(request);
             Ok(r.0.to_grpc())
         };
-        super::util::spawn_grpc_task(sink, task);        
+        super::util::spawn_grpc_task(sink, task);
     }
 
-    fn accept(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::Payload, sink: ::grpcio::UnarySink<AcceptOKPayload>) {
-        println!("Accept");
+    fn accept(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: super::epaxos::Payload,
+        sink: ::grpcio::UnarySink<AcceptOKPayload>,
+    ) {
+        info!("Accept");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             let mut epaxos_logic = self_inner.epaxos_logic.lock().unwrap();
@@ -214,8 +239,13 @@ impl EpaxosService for EpaxosServerImpl {
         super::util::spawn_grpc_task(sink, task);
     }
 
-    fn commit(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::Payload, sink: ::grpcio::UnarySink<Empty>) {
-        println!("Commit");
+    fn commit(
+        &mut self,
+        ctx: ::grpcio::RpcContext,
+        req: super::epaxos::Payload,
+        sink: ::grpcio::UnarySink<Empty>,
+    ) {
+        info!("Commit");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
         let task = async move {
             let mut epaxos_logic = self_inner.epaxos_logic.lock().unwrap();
@@ -227,5 +257,3 @@ impl EpaxosService for EpaxosServerImpl {
         super::util::spawn_grpc_task(sink, task);
     }
 }
-
-

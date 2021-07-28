@@ -1,6 +1,7 @@
 use grpcio::ChannelBuilder;
 
 use grpcio::Environment;
+use log::info;
 use sharedlib::epaxos::*;
 use sharedlib::epaxos_grpc::*;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ fn main() {
     let mut write_req = WriteRequest::new();
     write_req.set_key("pi".to_owned());
     write_req.set_value(7);
-    println!("start write");
+    info!("start write");
 
     smol::block_on(async {
         let resp = client.write_async(&write_req);
@@ -24,25 +25,24 @@ fn main() {
             Err(e) => panic!("Write no Responeses{}", e),
             Ok(_v) => {
                 if _v.commit {
-                    println!("Commit OK");
+                    info!("Commit OK");
                 }
-            },
+            }
         }
     });
-    println!("Client Just Write");
+    info!("Client Just Write");
 
     let mut read_req = ReadRequest::new();
     read_req.set_key("pi".to_owned());
 
-    
-    smol::block_on(async{
+    smol::block_on(async {
         let read_resp = client.read_async(&read_req);
         let value = read_resp.unwrap().await;
         match value {
             Err(e) => panic!("Write no Responeses{}", e),
             Ok(_v) => {
-                println!("The final value is:{}", _v.value);
-            },
+                info!("The final value is:{}", _v.value);
+            }
         }
     });
 }

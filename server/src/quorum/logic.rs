@@ -1,5 +1,7 @@
 use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
 
+use log::info;
+
 use super::{config::REPLICAS_NUM, execute::Executor};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
@@ -11,8 +13,8 @@ pub struct WriteRequest {
     pub value: i32,
 }
 
-// TODO: If you want to expose a public interface to different types of requests, 
-// then it must be based on a "virtual base class" to achieve this effect, 
+// TODO: If you want to expose a public interface to different types of requests,
+// then it must be based on a "virtual base class" to achieve this effect,
 // and a public interface for different external read requests or write requests.
 #[derive(Clone, Copy)]
 pub struct WriteResponse {
@@ -63,8 +65,8 @@ pub struct LogEntry {
 
 #[derive(Clone, PartialEq, Copy, Eq, Hash, PartialOrd)]
 pub struct Instance {
-    //TODO:In each epoch, there is a different instance version, 
-    // so before implementing the membership change, 
+    //TODO:In each epoch, there is a different instance version,
+    // so before implementing the membership change,
     //the epoch mechanism needs to be implemented first
     pub replica: u32,
     pub slot: u32,
@@ -116,28 +118,30 @@ impl EpaxosLogic {
     }
 
     pub fn update_log(&mut self, log_entry: LogEntry, instance: &Instance) {
-        println!("updating log.."); 
+        info!("updating log..");
         self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
         //TODO: Flush executed logs to disks
-
     }
 
     pub fn execute(&mut self) {
-        let inst = Instance{replica: self.id.0, slot: self.instance_number};
+        let inst = Instance {
+            replica: self.id.0,
+            slot: self.instance_number,
+        };
         let mut e = Executor::new(inst);
 
         let log_entry = self.cmds[inst.replica as usize].get(&(inst.slot as usize));
         match log_entry {
             Some(le) => {
                 e.add_exec(inst, le.seq, le.deps.clone());
-            },
+            }
             None => {
                 let mut v_i = Vec::new();
                 v_i.push(inst);
                 e.add_exec(inst, 1, v_i);
-            },
+            }
         }
-        
+
         e.run();
     }
 
@@ -183,7 +187,7 @@ impl EpaxosLogic {
             if seq == payload.seq && deps == payload.deps {
                 continue;
             } else {
-                println!("Got some dissenting voice: {:#?}", pre_accept_ok.deps);
+                info!("Got some dissenting voice: {:#?}", pre_accept_ok.deps);
                 // Union deps from all replies
                 let new_deps = self.union_deps(new_payload.deps, pre_accept_ok.deps);
                 new_payload.deps = new_deps.clone();
@@ -219,7 +223,7 @@ impl EpaxosLogic {
                 slot: instance.slot,
             },
         );
-        // println!("Commited. My log is {:#?}", self.cmds);
+        info!("Commited. My log is {:#?}", self.cmds);
     }
 
     pub fn accepted(&mut self, payload: Payload) {
@@ -260,7 +264,7 @@ impl EpaxosLogic {
             instance,
         } = pre_accept_req.0;
         let WriteRequest { key, value } = write_req.clone();
-        println!("Processing PreAccept for key: {}, value: {}", key, value);
+        info!("Processing PreAccept for key: {}, value: {}", key, value);
         let interf = self.find_interference(&key);
         let seq_ = cmp::max(seq, 1 + self.find_max_seq(&interf));
         if interf != deps {
@@ -282,7 +286,7 @@ impl EpaxosLogic {
         })
     }
     pub fn accept_(&mut self, accept_req: Accept) -> AcceptOK {
-        println!("=======ACCEPT========");
+        info!("=======ACCEPT========");
         let Payload {
             write_req,
             seq,
@@ -319,7 +323,7 @@ impl EpaxosLogic {
         };
         // Update the state in the log to commit
         self.update_log(log_entry, &instance);
-        println!("Committed. My log is {:#?}", self.cmds);
+        info!("Committed. My log is {:#?}", self.cmds);
     }
 
     fn find_interference(&self, key: &String) -> Vec<Instance> {

@@ -1,4 +1,9 @@
-use std::{cmp::{self, Ordering}, collections::HashMap};
+use std::{
+    cmp::{self, Ordering},
+    collections::HashMap,
+};
+
+use log::info;
 
 use crate::logic::Instance;
 
@@ -15,7 +20,6 @@ pub struct TarjanNode {
 
 impl TarjanNode {
     pub fn new(instance: Instance, seq: u32, dep_insts: Vec<Instance>) -> Self {
-        println!("seq is {:?}", seq);
         return TarjanNode {
             instance,
             index: -1,
@@ -76,7 +80,8 @@ impl Executor {
     }
 
     pub fn add_exec(&mut self, instance: Instance, seq: u32, inst_deps: Vec<Instance>) {
-        self.vertices.insert(instance, TarjanNode::new(instance, seq, inst_deps));
+        self.vertices
+            .insert(instance, TarjanNode::new(instance, seq, inst_deps));
     }
 
     // Real run Scc function.
@@ -86,11 +91,11 @@ impl Executor {
             self.execute_scc(&mut comp.to_vec());
         }
         self.reset();
-        
     }
 
     pub fn strong_connect_tarjan(&mut self) -> &Vec<Scc> {
-        for (_, mut v) in self.vertices.clone() { //TODO: Fix this!!
+        for (_, mut v) in self.vertices.clone() {
+            //TODO: Fix this!!
             v.reset();
             for dep_inst in v.dep_insts.iter() {
                 if self.vertices.contains_key(&dep_inst) {
@@ -99,7 +104,7 @@ impl Executor {
                 }
             }
         }
-    
+
         for (_, mut v) in self.vertices.clone() {
             if !v.visited() {
                 self.visit(&mut v);
@@ -108,13 +113,13 @@ impl Executor {
         return &self.components;
     }
 
-    pub fn visit(&mut self,  node: &mut TarjanNode) {
+    pub fn visit(&mut self, node: &mut TarjanNode) {
         node.index = self.index;
         node.low_link = self.index;
         self.index += 1;
         node.on_stack = false;
         self.stack.push(node.clone());
-        
+
         for dep in node.deps.iter_mut() {
             if !dep.visited() {
                 self.visit(dep);
@@ -152,18 +157,18 @@ impl Executor {
             None => {
                 //TODO: for test
                 panic!("no deps");
-            },
+            }
         }
     }
 
     pub fn execute_scc(&mut self, comp: &mut Scc) {
         for v in comp.iter() {
             for dep_node in v.dep_insts.iter() {
-                if self.vertices.contains_key(&dep_node) && 
-                contains(comp, &*self.vertices.get(dep_node).unwrap()) {
+                if self.vertices.contains_key(&dep_node)
+                    && contains(comp, &*self.vertices.get(dep_node).unwrap())
+                {
                     continue;
-            }
-                
+                }
 
                 //TODO: Do we need to filter the node in Scc has executed?
             }
@@ -177,7 +182,7 @@ impl Executor {
 
     fn real_execute(&mut self, node: &mut TarjanNode) {
         //update executed log!!!!
-        println!("The executed node is: {:?}", node);
+        info!("The executed node is: {:?}", node);
     }
 
     fn reset(&mut self) {
@@ -195,7 +200,7 @@ pub fn sort_scc(node1: &TarjanNode, node2: &TarjanNode) -> Ordering {
     }
     if node1.instance.replica < node2.instance.replica {
         return Ordering::Less;
-    } else if node1.instance.replica > node2.instance.replica{
+    } else if node1.instance.replica > node2.instance.replica {
         return Ordering::Greater;
     } else {
         return Ordering::Equal;
