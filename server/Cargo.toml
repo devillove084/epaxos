@@ -25,7 +25,7 @@ log = "0.4.14"
 
 [lib]
 name = "sharedlib"
-path = "src/quorum/mod.rs"
+path = "src/classic/mod.rs"
 
 [[bin]]
 name = "server"
