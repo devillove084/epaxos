@@ -150,8 +150,8 @@ impl EpaxosServerInner {
 
     fn execute(&self) {
         info!("Executing");
-        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-        epaxos_logic.execute();
+        let epaxos_logic = self.epaxos_logic.lock().unwrap();
+        //epaxos_logic.execute();
     }
 }
 

@@ -1,9 +1,7 @@
-use std::{cmp, cmp::Ordering, collections::HashMap, fmt};
-
+use std::{cmp, cmp::Ordering, collections::{HashMap, HashSet}, fmt};
 use log::info;
-
-use super::{config::REPLICAS_NUM, execute::Executor};
-
+use crate::tarjan::{Graph, Tarjan};
+use super::config::REPLICAS_NUM;
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
 
@@ -63,7 +61,7 @@ pub struct LogEntry {
     pub state: State,
 }
 
-#[derive(Clone, PartialEq, Copy, Eq, Hash, PartialOrd)]
+#[derive(Default, Clone, PartialEq, Copy, Eq, Hash, PartialOrd, Ord)]
 pub struct Instance {
     //TODO:In each epoch, there is a different instance version,
     // so before implementing the membership change,
@@ -123,26 +121,23 @@ impl EpaxosLogic {
         //TODO: Flush executed logs to disks
     }
 
-    pub fn execute(&mut self) {
-        let inst = Instance {
-            replica: self.id.0,
-            slot: self.instance_number,
-        };
-        let mut e = Executor::new(inst);
-
-        let log_entry = self.cmds[inst.replica as usize].get(&(inst.slot as usize));
-        match log_entry {
-            Some(le) => {
-                e.add_exec(inst, le.seq, le.deps.clone());
-            }
-            None => {
-                let mut v_i = Vec::new();
-                v_i.push(inst);
-                e.add_exec(inst, 1, v_i);
-            }
+    pub fn _execute(&mut self, dep: Vec<Instance>, instance: &Instance) {
+        let from = instance.slot;
+        let mut vec_to = Vec::new();
+        for i in dep {
+            vec_to.push(i.slot);
         }
 
-        e.run();
+        let mut g = Graph::new(vec_to.len());
+        for to in vec_to {
+            g.add_edge(from as usize, to as usize);
+        }
+
+        for component in Tarjan::walk(&g) {
+            println!("{:?}", component);
+        }
+
+
     }
 
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {
@@ -355,6 +350,15 @@ impl EpaxosLogic {
             }
         }
         seq
+    }
+
+    pub fn find_all_instance(&self, instance: &Instance, deps: Vec<Instance>) -> usize {
+        let mut hs = HashSet::new();
+        hs.insert(instance.slot);
+        for i in deps {
+            hs.insert(i.slot);
+        }
+        return hs.len();
     }
 }
 
