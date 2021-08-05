@@ -1,7 +1,13 @@
-use std::{cmp, cmp::Ordering, collections::{HashMap, HashSet}, fmt};
-use log::info;
-use crate::tarjan::{Graph, Tarjan};
+use crate::execute::Executor;
+
 use super::config::REPLICAS_NUM;
+use log::info;
+use std::{
+    cmp,
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    fmt,
+};
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
 
@@ -29,12 +35,22 @@ pub struct ReadResponse {
     pub value: i32,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Copy)]
 pub enum State {
     PreAccepted,
     Accepted,
     Committed,
     Executed,
+}
+
+impl State {
+    pub fn change_executed(self) -> Self {
+        if self.eq(&Self::Committed) {
+            return Self::Executed;
+        } else {
+            self
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +119,7 @@ pub struct EpaxosLogic {
     pub id: ReplicaId,
     pub cmds: Vec<HashMap<usize, LogEntry>>,
     pub instance_number: u32,
+    pub exec: Executor,
 }
 
 impl EpaxosLogic {
@@ -112,32 +129,45 @@ impl EpaxosLogic {
             id,
             cmds: commands,
             instance_number: 0,
+            exec: Executor::default(),
         }
     }
 
     pub fn update_log(&mut self, log_entry: LogEntry, instance: &Instance) {
         info!("updating log..");
-        self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
         //TODO: Flush executed logs to disks
+        let state = self.cmds[instance.replica as usize]
+            .get(&(instance.slot as usize))
+            .unwrap()
+            .state;
+        match state {
+            State::Committed => {
+                // TODO:async????
+                if self._execute(instance) {
+                    log_entry.state.change_executed();
+                    self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+                }
+            }
+            _ => {
+                self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+            }
+        }
     }
 
-    pub fn _execute(&mut self, dep: Vec<Instance>, instance: &Instance) {
-        let from = instance.slot;
-        let mut vec_to = Vec::new();
-        for i in dep {
-            vec_to.push(i.slot);
+    pub fn _execute(&mut self, instance: &Instance) -> bool {
+        let map = self.cmds[instance.replica as usize].clone();
+        self.exec.cmd = map.clone();
+        self.exec.replica_id = self.id.0;
+
+        let mut deps = Vec::new();
+        for (from, to_pre) in map.iter() {
+            for d in to_pre.deps.iter() {
+                deps.push((*from, d.slot as usize));
+            }
         }
 
-        let mut g = Graph::new(vec_to.len());
-        for to in vec_to {
-            g.add_edge(from as usize, to as usize);
-        }
-
-        for component in Tarjan::walk(&g) {
-            println!("{:?}", component);
-        }
-
-
+        self.exec.deps = deps.clone();
+        self.exec.execute()
     }
 
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {

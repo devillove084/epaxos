@@ -41,7 +41,7 @@ impl EpaxosServerInner {
             if i != id.0 as usize {
                 let env = Arc::new(Environment::new(1));
                 let ch = ChannelBuilder::new(env).connect(REPLICA_TEST[i]);
-                info!(">> Neighbor replica {} created",i);
+                info!(">> Neighbor replica {} created", i);
                 let replica = EpaxosServiceClient::new(ch);
                 replicas.insert(ReplicaId(i as u32), replica);
             }
