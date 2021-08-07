@@ -19,6 +19,7 @@ thiserror = "1.0.25"
 log = "0.4.14"
 rand = "0.8.4"
 petgraph = "0.6.0"
+sled = "0.34.6"
 
 [build-dependencies]
 protoc-grpcio = "3.0.0"

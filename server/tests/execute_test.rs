@@ -4,7 +4,7 @@ use petgraph::{
     graph::{node_index as n, NodeIndex},
     Graph,
 };
-use sharedlib::logic::Instance;
+use sharedlib::{execute::Executor, logic::Instance};
 
 struct Edge {
     from: Instance,
@@ -153,15 +153,18 @@ pub fn scc_test() {
     }
 }
 
-struct ExecNode {
-    id: usize,
-    deps: Vec<usize>,
+pub struct ExecNode {
+    // id means seq here
+    pub id: usize,
+    pub deps: Vec<usize>,
 }
 
 struct ExecEntry {
     scc: Vec<ExecNode>,
     execution: Vec<usize>,
 }
+
+impl ExecNode {}
 
 #[test]
 pub fn execute_test() {
@@ -255,7 +258,34 @@ pub fn execute_test() {
     ];
 
     for exec in execs {
-        // 获得所有的scc，
-        // 判断所有的执行路径是否是executed
+        let mut e = Executor::default();
+
+        let mut gr = Graph::new();
+        let mut mp = HashSet::new();
+        // build graph
+        for e in exec.scc.iter() {
+            mp.insert(e.id);
+            for i in e.deps.iter() {
+                mp.insert(*i);
+            }
+        }
+
+        for _ in 0..mp.len() {
+            gr.add_node(0);
+        }
+
+        for e in exec.scc.iter() {
+            for i in e.deps.iter() {
+                gr.add_edge(n(e.id), n(*i), ());
+            }
+        }
+
+        // re-test my execute logic
+        
+        
     }
+}
+
+pub fn sort_exec(a: ExecNode, b: ExecNode) -> bool {
+    return a.id < b.id;
 }

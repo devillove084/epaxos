@@ -5,7 +5,7 @@ use log::info;
 use std::{
     cmp,
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
 };
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
@@ -143,10 +143,9 @@ impl EpaxosLogic {
         match state {
             State::Committed => {
                 // TODO:async????
-                if self._execute(instance) {
-                    log_entry.state.change_executed();
-                    self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
-                }
+                self._execute(instance);
+                log_entry.state.change_executed();
+                self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
             }
             _ => {
                 self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
@@ -154,19 +153,46 @@ impl EpaxosLogic {
         }
     }
 
-    pub fn _execute(&mut self, instance: &Instance) -> bool {
-        let map = self.cmds[instance.replica as usize].clone();
-        self.exec.cmd = map.clone();
-        self.exec.replica_id = self.id.0;
-
-        let mut deps = Vec::new();
-        for (from, to_pre) in map.iter() {
-            for d in to_pre.deps.iter() {
-                deps.push((*from, d.slot as usize));
+    pub fn build_graph(
+        &mut self,
+        instance: &Instance,
+        gr_map: &mut Vec<(usize, usize)>,
+        seq_slot: &mut BTreeMap<usize, (Instance, usize)>,
+    ) {
+        match self.cmds[instance.replica as usize].get(&(instance.slot as usize)) {
+            Some(l) => {
+                let log_entry = l.clone();
+                if log_entry.deps.is_empty() || l.state == State::Executed {
+                    return;
+                }
+                for to_inst in log_entry.deps.iter() {
+                    gr_map.push((instance.slot as usize, to_inst.slot as usize));
+                    seq_slot.insert(instance.slot as usize, (*instance, log_entry.seq as usize));
+                    self.build_graph(to_inst, gr_map, seq_slot);
+                }
             }
+            None => return,
         }
+    }
 
-        self.exec.deps = deps.clone();
+    pub fn _execute(&mut self, instance: &Instance){
+        let mut gr_map = Vec::new();
+        let mut seq_slot = BTreeMap::new();
+        self.build_graph(instance, &mut gr_map, &mut seq_slot);
+
+        // Construct the slot -> Graph
+        let mut bs = BTreeMap::new();
+        let mut deps = Vec::new();
+        for dep in self.cmds[instance.replica as usize].get(&(instance.slot as usize)).unwrap().deps.iter() {
+            deps.push(dep.slot as usize);
+        }
+        bs.insert(instance.slot as usize,  deps);
+        self.exec.graph = gr_map;
+        self.exec.vertices = bs;
+        self.exec.seq_slot = seq_slot;
+        self.exec.cmds = self.cmds[instance.replica as usize].clone();
+
+        // execute
         self.exec.execute()
     }
 
