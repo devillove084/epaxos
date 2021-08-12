@@ -14,6 +14,7 @@ service EpaxosService {
     rpc commit(Payload) returns (Empty) {};
     rpc write(WriteRequest) returns (WriteResponse) {};
     rpc read(ReadRequest) returns (ReadResponse) {};
+    rpc prepare(Payload) returns (PrepareOKPayload) {}
 }
 
 message WriteRequest {
@@ -39,6 +40,7 @@ message Instance {
 }
 
 message Payload {
+    uint32 ballot = 1;
     WriteRequest write_req = 2;
     uint32 seq = 3;
     repeated Instance deps = 4;
@@ -47,6 +49,12 @@ message Payload {
 
 message AcceptOKPayload {
     WriteRequest command = 1;
+    Instance instance = 4;
+}
+
+message PrepareOKPayload {
+    WriteRequest command = 1;
+    uint32 ballot = 2;
     Instance instance = 4;
 }
 

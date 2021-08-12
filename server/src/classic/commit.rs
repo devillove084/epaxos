@@ -11,7 +11,7 @@ use std::{
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct ReplicaId(pub u32);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WriteRequest {
     pub key: String,
     pub value: i32,
@@ -53,11 +53,23 @@ impl State {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Payload {
+    pub ballot: u32,
     pub write_req: WriteRequest,
     pub seq: u32,
     pub deps: Vec<Instance>,
+    pub instance: Instance,
+}
+
+pub struct PreparePayload {
+    pub ballot: u32,
+    pub instance: Instance,
+}
+
+pub struct PrepareOKPayload {
+    pub write_req: WriteRequest,
+    pub ballot: u32,
     pub instance: Instance,
 }
 
@@ -86,6 +98,13 @@ pub struct Instance {
     pub slot: u32,
 }
 
+#[derive(Debug, Default)]
+pub struct Epoch {
+    pub epoch: u32,
+    pub ballot: u32,
+    pub replica: u32,
+}
+
 pub struct PreAccept(pub Payload);
 
 pub struct Accept(pub Payload);
@@ -96,9 +115,17 @@ pub struct PreAcceptOK(pub Payload);
 
 pub struct AcceptOK(pub AcceptOKPayload);
 
+pub struct Prepare(pub PrepareOKPayload);
+
 pub enum Path {
     Slow(Payload),
     Fast(Payload),
+}
+
+pub enum PrepareStage {
+    Commit(Payload),
+    PaxosAccept(Payload),
+    PhaseOne(Payload),
 }
 
 pub fn sort_instances(inst1: &Instance, inst2: &Instance) -> Ordering {
@@ -119,7 +146,9 @@ pub struct EpaxosLogic {
     pub id: ReplicaId,
     pub cmds: Vec<HashMap<usize, LogEntry>>,
     pub instance_number: u32,
+    pub ballot: u32,
     pub exec: Executor,
+    pub epoch_: Epoch,
 }
 
 impl EpaxosLogic {
@@ -127,9 +156,11 @@ impl EpaxosLogic {
         let commands = vec![HashMap::new(); REPLICAS_NUM];
         EpaxosLogic {
             id,
+            ballot: 0,
             cmds: commands,
             instance_number: 0,
             exec: Executor::default(),
+            epoch_: Epoch::default(),
         }
     }
 
@@ -153,32 +184,12 @@ impl EpaxosLogic {
         }
     }
 
-    pub fn build_graph(
-        &mut self,
-        instance: &Instance,
-        gr_map: &mut Vec<(usize, usize)>,
-        seq_slot: &mut BTreeMap<usize, (Instance, usize)>,
-    ) {
-        match self.cmds[instance.replica as usize].get(&(instance.slot as usize)) {
-            Some(l) => {
-                let log_entry = l.clone();
-                if log_entry.deps.is_empty() || l.state == State::Executed {
-                    return;
-                }
-                for to_inst in log_entry.deps.iter() {
-                    gr_map.push((instance.slot as usize, to_inst.slot as usize));
-                    seq_slot.insert(instance.slot as usize, (*instance, log_entry.seq as usize));
-                    self.build_graph(to_inst, gr_map, seq_slot);
-                }
-            }
-            None => return,
-        }
-    }
+     // TODO: put in execute entry
 
     pub fn _execute(&mut self, instance: &Instance){
         let mut gr_map = Vec::new();
         let mut seq_slot = BTreeMap::new();
-        self.build_graph(instance, &mut gr_map, &mut seq_slot);
+        self.exec.build_graph(instance, &mut gr_map, &mut seq_slot);
 
         // Construct the slot -> Graph
         let mut bs = BTreeMap::new();
@@ -186,11 +197,12 @@ impl EpaxosLogic {
         for dep in self.cmds[instance.replica as usize].get(&(instance.slot as usize)).unwrap().deps.iter() {
             deps.push(dep.slot as usize);
         }
+        
         bs.insert(instance.slot as usize,  deps);
         self.exec.graph = gr_map;
         self.exec.vertices = bs;
         self.exec.seq_slot = seq_slot;
-        self.exec.cmds = self.cmds[instance.replica as usize].clone();
+        //self.exec.cmds = self.cmds[instance.replica as usize].clone();
 
         // execute
         self.exec.execute()
@@ -198,6 +210,8 @@ impl EpaxosLogic {
 
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {
         let slot = self.instance_number;
+        // TODO: ballot epoch (epoch.0.R) is implicit at beginning of every instance
+        let ballot = self.ballot;
         let interf = self.find_interference(&write_req.key);
         let seq = 1 + self.find_max_seq(&interf);
         let log_entry = LogEntry {
@@ -207,6 +221,7 @@ impl EpaxosLogic {
             deps: interf.clone(),
             state: State::PreAccepted,
         };
+        // Not only update log, actually update cmd space, it is preAccepted
         self.update_log(
             log_entry,
             &Instance {
@@ -215,6 +230,8 @@ impl EpaxosLogic {
             },
         );
         Payload {
+            // maybe init a unqiue ballot
+            ballot: self.ballot,
             write_req,
             seq,
             deps: interf,
@@ -226,10 +243,12 @@ impl EpaxosLogic {
     }
 
     pub fn decide_path(&self, pre_accept_oks: Vec<Payload>, payload: &Payload) -> Path {
+        // TODO: We have to judge the pre_accepts_ok vector len at least n/2 - 1
         let mut new_payload = payload.clone();
         let mut path = Path::Fast(payload.clone());
         for pre_accept_ok in pre_accept_oks {
             let Payload {
+                ballot,
                 write_req: _,
                 seq,
                 deps,
@@ -254,6 +273,7 @@ impl EpaxosLogic {
 
     pub fn committed(&mut self, payload: Payload) {
         let Payload {
+            ballot,
             write_req,
             seq,
             deps,
@@ -279,12 +299,16 @@ impl EpaxosLogic {
 
     pub fn accepted(&mut self, payload: Payload) {
         let Payload {
+            ballot,
             write_req,
             seq,
             deps,
             instance,
         } = payload;
+        // we should judge ballot number is larger or smaller
+
         let log_entry = LogEntry {
+            //TODO: fix the ballot judge
             key: write_req.key,
             value: write_req.value,
             seq: seq,
@@ -309,6 +333,7 @@ impl EpaxosLogic {
 
     pub fn pre_accept_(&mut self, pre_accept_req: PreAccept) -> PreAcceptOK {
         let Payload {
+            ballot,
             write_req,
             seq,
             mut deps,
@@ -328,17 +353,64 @@ impl EpaxosLogic {
             deps: deps.clone(),
             state: State::PreAccepted,
         };
+        // update cmd
         self.update_log(log_entry, &instance);
+        if self.ballot > ballot {
+            return PreAcceptOK(Payload {
+                ballot: self.ballot,
+                write_req: write_req,
+                seq: seq_,
+                deps: deps,
+                instance: instance,
+            });
+        } else {
+
+        }
         PreAcceptOK(Payload {
+            ballot,
             write_req: write_req,
             seq: seq_,
             deps: deps,
             instance: instance,
         })
     }
+
+    pub fn aware_ballot(&mut self, payload: &Payload) -> Payload {
+        let deps = self.cmds[payload.instance.replica as usize].get(&(payload.instance.slot as usize)).unwrap().deps;
+        
+        //TODO: how do i know the max proposql id in my replica
+        // how do i construct the Prepare(epoch.(b+1).Q, instance) in the payload.
+        Payload::default()
+    }
+
+    pub fn decide_prepare(&mut self, replies: Vec<PrepareOKPayload>, payload: &Payload) -> PrepareStage {
+        if replies.contain(payload) == State::Committed {
+            return PrepareStage::Commit(*payload);
+        } else if replies.contain(payload) == State::Accepted {
+            return PrepareStage::PaxosAccept(*payload);
+        } else if replies.at_least_contain(*payload) == State::PreAccepted {
+            return PrepareStage::PaxosAccept(*payload);
+        } else if replies.at_least_one_contain(payload) {
+            // start Phase 1 (at line 2) for γ at L.i, avoid fast path
+            // XXX: This is wrong code.
+            return PrepareStage::PhaseOne(*payload);
+        }else {
+            //TODO: start Phase 1 (at line 2) for no-op at L.i, avoid fast path
+            // XXX: This is wrong code
+            return PrepareStage::PhaseOne(*payload);
+        }
+
+    }
+
+    pub fn decide_prepare_ok(&mut self, info: Payload) -> Result<PrepareOKPayload, std::fmt::Error> {
+        //TODO: How do i know "epoch.b.Qislargerthanthemostrecentballot number epoch.x.Y accepted for instance L.i "
+        return Err(todo!());
+    }
+
     pub fn accept_(&mut self, accept_req: Accept) -> AcceptOK {
         info!("=======ACCEPT========");
         let Payload {
+            ballot,
             write_req,
             seq,
             deps,
@@ -360,6 +432,7 @@ impl EpaxosLogic {
     }
     pub fn commit_(&mut self, commit_req: Commit) -> () {
         let Payload {
+            ballot,
             write_req,
             seq,
             deps,
@@ -415,6 +488,16 @@ impl EpaxosLogic {
             hs.insert(i.slot);
         }
         return hs.len();
+    }
+
+    // Ballot helper function
+
+    pub fn make_unique_ballot(&self, ballot: u32) -> u32 {
+        return (ballot << 4) | self.id.0;
+    }
+
+    pub fn make_ballot_larger_than(&self, ballot: u32) -> u32 {
+        return self.make_unique_ballot((ballot >> 4) + 1);
     }
 }
 

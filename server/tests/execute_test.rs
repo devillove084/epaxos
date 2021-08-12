@@ -4,7 +4,7 @@ use petgraph::{
     graph::{node_index as n, NodeIndex},
     Graph,
 };
-use sharedlib::{execute::Executor, logic::Instance};
+use sharedlib::{execute::Executor, commit::Instance};
 
 struct Edge {
     from: Instance,

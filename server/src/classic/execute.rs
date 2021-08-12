@@ -9,9 +9,9 @@ use std::sync::Arc;
 use petgraph::graph::node_index as n;
 use petgraph::graph::NodeIndex;
 
-use crate::logic::Instance;
-use crate::logic::LogEntry;
-use crate::logic::State;
+use crate::commit::Instance;
+use crate::commit::LogEntry;
+use crate::commit::State;
 
 #[derive(Default)]
 pub struct ExecutorInner {
@@ -26,7 +26,7 @@ pub struct Executor {
     pub vertices: BTreeMap<usize, Vec<usize>>,
     // for sort scc
     pub seq_slot: BTreeMap<usize, (Instance, usize)>,
-    // for judge has executed
+    // // for judge has executed
     pub cmds: HashMap<usize, LogEntry>,
 
     // real graph
@@ -66,42 +66,66 @@ impl ExecutorInner {
 }
 
 impl Executor {
+    pub fn build_graph(
+        &mut self,
+        instance: &Instance,
+        gr_map: &mut Vec<(usize, usize)>,
+        seq_slot: &mut BTreeMap<usize, (Instance, usize)>,
+    ) {
+        match self.cmds.get(&(instance.slot as usize)) {
+            Some(l) => {
+                let log_entry = l.clone();
+                if log_entry.deps.is_empty() || l.state == State::Executed {
+                    return;
+                }
+                for to_inst in log_entry.deps.iter() {
+                    gr_map.push((instance.slot as usize, to_inst.slot as usize));
+                    seq_slot.insert(instance.slot as usize, (*instance, log_entry.seq as usize));
+                    self.build_graph(to_inst, gr_map, seq_slot);
+                }
+            }
+            None => return,
+        }
+    }
+
     pub fn execute(&mut self){
         let local_scc = self.inner.clone();
         let comps =
             local_scc.strong_connect(&self.graph);
         for comp in comps {
-            smol::block_on(async {
-                self.execute_scc(&mut comp.clone());
-            });
+            // smol::block_on(async {
+            //     //TODO:
+                
+            // });
+            self.execute_scc(&mut comp.clone());
         }
     }
 
     pub fn execute_scc(&mut self, comp: &mut Vec<NodeIndex>){
-        for v in comp.iter() {
-            // The dependency should either be in this strongly connected
-            // component or have already been executed (possibly by an earlier
-            // SCC). If those conditions are not true, abort executing the
-            // entire SCC.
-            let deps = self.vertices.get(&v.index());
-            match deps {
-                Some(dep) => {
-                    for d in dep {
-                        if comp.contains(&n(*d)) {
-                            continue;
-                        }
+        // for v in comp.iter() {
+        //     // The dependency should either be in this strongly connected
+        //     // component or have already been executed (possibly by an earlier
+        //     // SCC). If those conditions are not true, abort executing the
+        //     // entire SCC.
+        //     let deps = self.vertices.get(&v.index());
+        //     match deps {
+        //         Some(dep) => {
+        //             for d in dep {
+        //                 if comp.contains(&n(*d)) {
+        //                     continue;
+        //                 }
 
-                        // The dependency is not in this SCC and
-                        // has not been executed in a prerequisite SCC.
-                        // We cannot execute at this time.
-                        if self.has_executed(dep) {
-                            return;
-                        }
-                    }
-                }
-                None => unreachable!(),
-            }
-        }
+        //                 // The dependency is not in this SCC and
+        //                 // has not been executed in a prerequisite SCC.
+        //                 // We cannot execute at this time.
+        //                 if self.has_executed(dep) {
+        //                     return;
+        //                 }
+        //             }
+        //         }
+        //         None => unreachable!(),
+        //     }
+        // }
         // Sort the component based on SCC execution order.
         comp.sort_by(|a: &NodeIndex, b: &NodeIndex| -> Ordering {
             let seq1 = self.seq_slot.get(&a.index()).unwrap();
@@ -116,6 +140,9 @@ impl Executor {
         });
 
         for v in comp {
+            //TODO: Write the executed node in log and in-memory db
+
+
             // Delete the entry in vertices
             match self.vertices.entry(v.index()) {
                 Occupied(o) => {
@@ -126,17 +153,17 @@ impl Executor {
                 Vacant(_) => unreachable!(),
             }
 
-            //TODO: Write the executed node in log and in-memory db
+            
         }
     }
 
-    pub fn has_executed(&self, deps: &Vec<usize>) -> bool {
-        for v in deps {
-            let log = self.cmds.get(&v).unwrap();
-            if log.state == State::Executed {
-                return true;
-            }
-        }
-        false
-    }
+    // pub fn has_executed(&self, deps: &Vec<usize>) -> bool {
+    //     for v in deps {
+    //         let log = self.cmds.get(&v).unwrap();
+    //         if log.state == State::Executed {
+    //             return true;
+    //         }
+    //     }
+    //     false
+    // }
 }

@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use super::epaxos as grpc;
-use super::logic::*;
+use super::commit::*;
 
 impl WriteRequest {
     pub fn from_grpc(req: &grpc::WriteRequest) -> Self {
@@ -60,6 +60,7 @@ impl ReadResponse {
 impl Payload {
     pub fn from_grpc(payload: &grpc::Payload) -> Self {
         Payload {
+            ballot: payload.get_ballot(),
             write_req: WriteRequest::from_grpc(payload.get_write_req()),
             seq: payload.get_seq(),
             deps: payload.get_deps().iter().map(Instance::from_grpc).collect(),
@@ -90,6 +91,24 @@ impl AcceptOKPayload {
     pub fn to_grpc(&self) -> grpc::AcceptOKPayload {
         let mut payload = grpc::AcceptOKPayload::new();
         payload.set_command(self.write_req.to_grpc());
+        payload.set_instance(self.instance.to_grpc());
+        payload
+    }
+}
+
+impl PrepareOKPayload {
+    pub fn from_grpc(payload: &grpc::PrepareOKPayload) -> Self {
+        PrepareOKPayload {
+            write_req: WriteRequest::from_grpc(payload.get_command()),
+            ballot: payload.get_ballot(),
+            instance: Instance::from_grpc(payload.get_instance()),
+        }
+    }
+
+    pub fn to_grpc(&self) -> grpc::PrepareOKPayload {
+        let mut payload = grpc::PrepareOKPayload::new();
+        payload.set_command(self.write_req.to_grpc());
+        payload.set_ballot(self.ballot);
         payload.set_instance(self.instance.to_grpc());
         payload
     }
