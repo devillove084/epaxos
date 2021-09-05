@@ -2,60 +2,188 @@ syntax = "proto3";
 
 package epaxos;
 
-// service EpaxosInternal {
-//     rpc pre_accept(Payload) returns (Payload);
-//     rpc accept(Payload) returns (AcceptOKPayload);
-//     rpc commit(Payload) returns (Empty);
-// }
-
 service EpaxosService {
-    rpc pre_accept(Payload) returns (Payload) {};
-    rpc accept(Payload) returns (AcceptOKPayload) {};
-    rpc commit(Payload) returns (Empty) {};
-    rpc write(WriteRequest) returns (WriteResponse) {};
-    rpc read(ReadRequest) returns (ReadResponse) {};
-    rpc prepare(Payload) returns (PrepareOKPayload) {}
+  rpc pre_accept(PreAcceptPayload) returns (PreAcceptReplyPayload) {};
+  //rpc pre_accept_ok(PreAcceptOKPayload) returns (Empty) {};
+  rpc accept(AcceptPayload) returns (AcceptReplyPayload) {};
+  rpc commit(CommitPayload) returns (Empty) {};
+  rpc commitshort(CommitShortPayload) returns (Empty) {};
+  // rpc write(WriteRequest) returns (WriteResponse) {};
+  // rpc read(ReadRequest) returns (ReadResponse) {};
+  rpc propose(ProposePayload) returns (ProposeReplyPayload) {};
+  rpc prepare(PreparePayload) returns (PrepareReplyPayload) {};
+  rpc try_pre_accept(TryPreAcceptPayload) returns (TryPreAcceptReplyPayload) {};
 }
 
-message WriteRequest {
-    string key = 1;
-    int32 value = 2;
+enum Operation {
+  PUT = 0;
+  PUT_BLIND = 1; // Result not needed immediately
+                 // PUTRANGE = 2;
+  GET = 2;
+  // GETRANGE = 4;
+  // UPDATE = 5;
+  // DELETE = 6;
 }
 
-message WriteResponse {
-    bool commit = 1;
+message Command {
+  Operation op = 1;
+  string key = 2;
+  int32 value = 3;
 }
 
-message ReadRequest {
-    string key = 1;
+message ProposePayload {
+  uint32 command_id = 1;
+  Command command = 2;
+  uint64 timestamp = 3;
 }
 
-message ReadResponse {
-    int32 value = 1;
+message ProposeReplyPayload {
+  bool ok = 1;
+  uint32 command_id = 2;
+  int32 value = 3;
+  uint64 timestamp = 4;
 }
 
 message Instance {
-    uint32 replica = 1;
-    uint32 slot = 2;
+  uint32 replica = 1;
+  uint32 slot = 2;
 }
 
-message Payload {
-    uint32 ballot = 1;
-    WriteRequest write_req = 2;
-    uint32 seq = 3;
-    repeated Instance deps = 4;
-    Instance instance = 5;
+enum PayloadState {
+  PREACCEPTED = 0;
+  PREACCEPTEDEQ = 1;
+  ACCEPTED = 2;
+  COMMITTED = 3;
+  EXECUTED = 4;
 }
 
-message AcceptOKPayload {
-    WriteRequest command = 1;
-    Instance instance = 4;
+// message Payload {
+//   uint32 ballot = 1;
+//   // WriteRequest write_req = 2;
+//   repeated Command command = 2;
+//   uint32 seq = 3;
+//   repeated Instance deps = 4;
+//   Instance instance = 5;
+//   State state = 6;
+//   CommandLeaderBookKeeping clbk = 7;
+// }
+
+// message RecoveryPayload {
+//   uint32 ballot = 1;
+//   // WriteRequest write_req = 2;
+//   Command command = 2;
+//   uint32 seq = 3;
+//   repeated Instance deps = 4;
+//   Instance instance = 5;
+//   uint32 pre_accept_count = 6;
+//   bool command_leader_response = 7;
+// }
+
+// message CommandLeaderBookKeeping {
+//   repeated Propose client_proposal = 1;
+//   uint32 max_recv_ballot = 2;
+//   uint32 prepare_oks = 3;
+//   bool all_equal = 4;
+//   uint32 pre_accept_oks = 5;
+//   uint32 accept_oks = 6;
+//   uint32 nacks = 7;
+//   repeated Instance original_deps = 8;
+//   repeated Instance committed_deps = 9;
+//   RecoveryPayload recovery_insts = 10;
+//   bool preparing = 11;
+//   bool trying_to_pre_accept = 12;
+//   repeated bool possible_quorum = 13;
+//   uint32 tpa_oks = 14;
+//   uint64 commit_time = 15;
+// }
+
+message PreAcceptPayload {
+  uint32 leader_id = 1;
+  Instance instance = 2;
+  uint32 ballot = 3;
+  repeated Command command = 4;
+  uint32 seq = 5;
+  repeated Instance deps = 6;
 }
 
-message PrepareOKPayload {
-    WriteRequest command = 1;
-    uint32 ballot = 2;
-    Instance instance = 4;
+message PreAcceptReplyPayload {
+  Instance instance = 1;
+  uint32 ok = 2;
+  uint32 ballot = 3;
+  repeated Command command = 4;
+  uint32 seq = 5;
+  repeated Instance deps = 6;
+  repeated Instance committed_deps = 7;
+}
+
+message PreAcceptOKPayload {
+  Instance instance = 1;
+}
+
+message AcceptPayload {
+  uint32 leader_id = 1;
+  Instance instance = 2;
+  uint32 ballot = 3;
+  uint32 count = 4;
+  uint32 seq = 5;
+  repeated Instance deps = 6;
+}
+
+message AcceptReplyPayload {
+  Instance instance = 1;
+  uint32 ok = 2;
+  uint32 ballot = 3;
+}
+
+message CommitPayload {
+  uint32 leader_id = 1;
+  Instance instance = 2;
+  repeated Command command = 3;
+  uint32 seq = 4;
+  repeated Instance deps = 5;
+}
+
+message CommitShortPayload {
+  uint32 leader_id = 1;
+  Instance instance = 2;
+  uint32 count = 3;
+  uint32 seq = 4;
+  repeated Instance deps = 5;
+}
+
+message PreparePayload {
+  uint32 leader_id = 1;
+  Instance instance = 2;
+  uint32 ballot = 3;
+}
+
+message PrepareReplyPayload {
+  uint32 accept_id = 1;
+  uint32 ok = 2;
+  Instance instance = 3;
+  uint32 ballot = 4;
+  PayloadState state = 5;
+  repeated Command command = 6;
+  uint32 seq = 7;
+  repeated Instance deps = 8;
+}
+
+message TryPreAcceptPayload {
+  uint32 leader_id = 1;
+  Instance instance = 2;
+  uint32 ballot = 3;
+  repeated Command command = 4;
+  uint32 seq = 5;
+  repeated Instance deps = 6;
+}
+
+message TryPreAcceptReplyPayload {
+  uint32 accept_id = 1;
+  Instance instance = 2;
+  uint32 ok = 3;
+  uint32 ballot = 4;
+  Instance conflict_instance = 5;
+  PayloadState conflict_state = 6;
 }
 
 message Empty {}

@@ -9,9 +9,9 @@ use std::sync::Arc;
 use petgraph::graph::node_index as n;
 use petgraph::graph::NodeIndex;
 
-use crate::commit::Instance;
-use crate::commit::LogEntry;
-use crate::commit::State;
+use crate::message::Instance;
+use crate::message::LogEntry;
+use crate::message::State;
 
 #[derive(Default)]
 pub struct ExecutorInner {
@@ -88,20 +88,19 @@ impl Executor {
         }
     }
 
-    pub fn execute(&mut self){
+    pub fn execute(&mut self) {
         let local_scc = self.inner.clone();
-        let comps =
-            local_scc.strong_connect(&self.graph);
+        let comps = local_scc.strong_connect(&self.graph);
         for comp in comps {
             // smol::block_on(async {
             //     //TODO:
-                
+
             // });
             self.execute_scc(&mut comp.clone());
         }
     }
 
-    pub fn execute_scc(&mut self, comp: &mut Vec<NodeIndex>){
+    pub fn execute_scc(&mut self, comp: &mut Vec<NodeIndex>) {
         // for v in comp.iter() {
         //     // The dependency should either be in this strongly connected
         //     // component or have already been executed (possibly by an earlier
@@ -142,7 +141,6 @@ impl Executor {
         for v in comp {
             //TODO: Write the executed node in log and in-memory db
 
-
             // Delete the entry in vertices
             match self.vertices.entry(v.index()) {
                 Occupied(o) => {
@@ -152,8 +150,6 @@ impl Executor {
                 }
                 Vacant(_) => unreachable!(),
             }
-
-            
         }
     }
 

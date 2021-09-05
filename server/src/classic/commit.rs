@@ -1,166 +1,72 @@
-use crate::execute::Executor;
+use crate::{execute::Executor, message::{Command, CommandLeaderBookKeeping, CoreInfo, Instance, InstanceEntry, LogEntry, Path, PayloadState, PreAcceptReplyPayload, ReplicaId, State}};
 
 use super::config::REPLICAS_NUM;
 use log::info;
-use std::{
-    cmp,
-    cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet},
-    fmt,
-};
-#[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
-pub struct ReplicaId(pub u32);
-
-#[derive(Debug, Clone, Default)]
-pub struct WriteRequest {
-    pub key: String,
-    pub value: i32,
-}
-
-// TODO: If you want to expose a public interface to different types of requests,
-// then it must be based on a "virtual base class" to achieve this effect,
-// and a public interface for different external read requests or write requests.
-#[derive(Clone, Copy)]
-pub struct WriteResponse {
-    pub commit: bool,
-}
-
-#[derive(Clone)]
-pub struct ReadRequest {
-    pub key: String,
-}
-
-#[derive(Clone, Copy)]
-pub struct ReadResponse {
-    pub value: i32,
-}
-
-#[derive(Clone, PartialEq, Eq, Copy)]
-pub enum State {
-    PreAccepted,
-    Accepted,
-    Committed,
-    Executed,
-}
-
-impl State {
-    pub fn change_executed(self) -> Self {
-        if self.eq(&Self::Committed) {
-            return Self::Executed;
-        } else {
-            self
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Payload {
-    pub ballot: u32,
-    pub write_req: WriteRequest,
-    pub seq: u32,
-    pub deps: Vec<Instance>,
-    pub instance: Instance,
-}
-
-pub struct PreparePayload {
-    pub ballot: u32,
-    pub instance: Instance,
-}
-
-pub struct PrepareOKPayload {
-    pub write_req: WriteRequest,
-    pub ballot: u32,
-    pub instance: Instance,
-}
-
-#[derive(Clone)]
-pub struct AcceptOKPayload {
-    pub write_req: WriteRequest,
-    pub instance: Instance,
-}
-
-#[derive(Clone)]
-pub struct LogEntry {
-    //TODO：It is best not to expose the specific structure of kv here.
-    pub key: String,
-    pub value: i32,
-    pub seq: u32,
-    pub deps: Vec<Instance>,
-    pub state: State,
-}
-
-#[derive(Default, Clone, PartialEq, Copy, Eq, Hash, PartialOrd, Ord)]
-pub struct Instance {
-    //TODO:In each epoch, there is a different instance version,
-    // so before implementing the membership change,
-    //the epoch mechanism needs to be implemented first
-    pub replica: u32,
-    pub slot: u32,
-}
-
-#[derive(Debug, Default)]
-pub struct Epoch {
-    pub epoch: u32,
-    pub ballot: u32,
-    pub replica: u32,
-}
-
-pub struct PreAccept(pub Payload);
-
-pub struct Accept(pub Payload);
-
-pub struct Commit(pub Payload);
-
-pub struct PreAcceptOK(pub Payload);
-
-pub struct AcceptOK(pub AcceptOKPayload);
-
-pub struct Prepare(pub PrepareOKPayload);
-
-pub enum Path {
-    Slow(Payload),
-    Fast(Payload),
-}
-
-pub enum PrepareStage {
-    Commit(Payload),
-    PaxosAccept(Payload),
-    PhaseOne(Payload),
-}
-
-pub fn sort_instances(inst1: &Instance, inst2: &Instance) -> Ordering {
-    if inst1.replica < inst2.replica {
-        Ordering::Less
-    } else if inst1.replica > inst2.replica {
-        Ordering::Greater
-    } else {
-        if inst1.slot < inst2.slot {
-            Ordering::Less
-        } else {
-            Ordering::Greater
-        }
-    }
-}
+use std::{cmp, collections::{BTreeMap, HashMap, HashSet}, fmt};
 
 pub struct EpaxosLogic {
-    pub id: ReplicaId,
+    //pub id: ReplicaId,
     pub cmds: Vec<HashMap<usize, LogEntry>>,
-    pub instance_number: u32,
-    pub ballot: u32,
+    //pub instance_number: u32,
+    // instance -> ballot
+    //pub inst_ballot: BTreeMap<Instance, u32>,
     pub exec: Executor,
-    pub epoch_: Epoch,
+    pub info: CoreInfo,
+    pub instance_entry_space: BTreeMap<Instance, InstanceEntry>,
+    pub current_instance: Vec<u32>,
+    pub commited_upto_instance: Vec<u32>,
+    pub execed_upto_instance: Vec<u32>,
+    pub conflicts: Vec<BTreeMap<String, u32>>,
+    pub max_seq_per_key: BTreeMap<String, u32>,
+    pub max_seq: u32,
+    pub lastest_cp_replica: u32,
+    pub lastest_cp_instance: u32,
+    pub instance_to_revovery: Vec<Instance>,
 }
 
 impl EpaxosLogic {
-    pub fn init(id: ReplicaId) -> EpaxosLogic {
+    // id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, beacon bool, durable bool
+    pub fn init(id: ReplicaId, peerAddrList: Vec<String>, thrifty: bool, exec: bool, dreply: bool, beacon: bool, durable: bool) -> EpaxosLogic {
         let commands = vec![HashMap::new(); REPLICAS_NUM];
-        EpaxosLogic {
+        let info = CoreInfo {
+            n: REPLICAS_NUM,
             id,
-            ballot: 0,
+            peer_addr_list: peerAddrList,
+            peers: Vec::new(),
+            peer_readers: Vec::new(),
+            peer_writers: Vec::new(),
+            alive: BTreeMap::new(),
+            state: None,
+            shutdown: false,
+            thrifty,
+            beacon,
+            durable,
+            stable_store: None,
+            preferred_peer_order: Vec::new(),
+            ewma: Vec::new(),
+            on_client_connect: false,
+            dreply,
+            exec,
+        };
+        // spawn run to start the core logic
+
+
+        EpaxosLogic {
             cmds: commands,
-            instance_number: 0,
+            //instance_number: 0,
             exec: Executor::default(),
-            epoch_: Epoch::default(),
+            //inst_ballot: BTreeMap::new(),
+            info,
+            current_instance: Vec::new(),
+            commited_upto_instance: Vec::new(),
+            execed_upto_instance: Vec::new(),
+            conflicts: Vec::new(),
+            max_seq_per_key: BTreeMap::new(),
+            max_seq: 0,
+            lastest_cp_replica: 0,
+            lastest_cp_instance: 0,
+            instance_to_revovery: Vec::new(),
+            instance_entry_space: BTreeMap::new(),
         }
     }
 
@@ -184,9 +90,7 @@ impl EpaxosLogic {
         }
     }
 
-     // TODO: put in execute entry
-
-    pub fn _execute(&mut self, instance: &Instance){
+    pub fn _execute(&mut self, instance: &Instance) {
         let mut gr_map = Vec::new();
         let mut seq_slot = BTreeMap::new();
         self.exec.build_graph(instance, &mut gr_map, &mut seq_slot);
@@ -194,11 +98,16 @@ impl EpaxosLogic {
         // Construct the slot -> Graph
         let mut bs = BTreeMap::new();
         let mut deps = Vec::new();
-        for dep in self.cmds[instance.replica as usize].get(&(instance.slot as usize)).unwrap().deps.iter() {
+        for dep in self.cmds[instance.replica as usize]
+            .get(&(instance.slot as usize))
+            .unwrap()
+            .deps
+            .iter()
+        {
             deps.push(dep.slot as usize);
         }
-        
-        bs.insert(instance.slot as usize,  deps);
+
+        bs.insert(instance.slot as usize, deps);
         self.exec.graph = gr_map;
         self.exec.vertices = bs;
         self.exec.seq_slot = seq_slot;
@@ -208,13 +117,86 @@ impl EpaxosLogic {
         self.exec.execute()
     }
 
+    pub fn handle_pre_accpet_reply(&mut self, preply_payload: PreAcceptReplyPayload) {
+        info!("Handling PreAccept reply");
+        let mut inst = self.instance_entry_space.get(&preply_payload.instance).unwrap();
+
+        if inst.state.state_num != 0 {
+            // we've moved on, this is a delayed reply
+            return;
+        }
+
+        if inst.ballot != preply_payload.ballot {
+            return;
+        }
+
+        if preply_payload.ok == 0  {
+            // TODO: there is probably another active leader
+            inst.from_leader.nacks += 1;
+            if preply_payload.ballot > inst.from_leader.max_recv_ballot {
+                inst.from_leader.max_recv_ballot = preply_payload.ballot;
+            }
+            if inst.from_leader.nacks >= self.info.n as u32 / 2 {
+                // TODO:
+            }
+
+            return;
+        }
+
+        inst.from_leader.prepare_oks += 1;
+
+        let mut equal = false;
+        (inst.seq, inst.deps, equal) = self.merge_attributes(inst.seq, inst.deps, preply_payload.seq, preply_payload.deps);
+        if (self.info.n <= 3 && !self.info.thrifty) || inst.from_leader.pre_accept_oks > 1 {
+            inst.from_leader.all_equal = inst.from_leader.all_equal && equal;
+            if !equal {
+                conflicts += 1;
+            }
+        }
+
+        let mut all_commited = true;
+        for q in 0..self.info.n {
+            if inst.from_leader.commited_deps[q] < preply_payload.commited_deps[q] {
+                inst.from_leader.commited_deps[q] = preply_payload.commited_deps[q];
+            }
+            if inst.from_leader.commited_deps[q] < self.commited_upto_instance[q] {
+                inst.from_leader.commited_deps[q] = self.commited_upto_instance[q];
+            }
+            if inst.from_leader.commited_deps[q] < inst.deps[q] {
+                all_commited = false;
+            }
+        }
+
+        //can we commit on the fast path?
+        if inst.from_leader.pre_accept_oks >= self.info.n as u32 / 2 && inst.from_leader.all_equal && all_commited && is_initial_ballot(inst.ballot) {
+            happy += 1;
+            info!("Fast path for instance");
+            // change to committed
+            self.instance_entry_space[&preply_payload.instance].state = PayloadState {state_num: 3};
+            self.update_committed(preply_payload.instance);
+
+            if inst.from_leader.client_proposals.len() > 0 && !self.info.dreply {
+                // give clients the all clear
+                for i in 0..inst.from_leader.client_proposals.len() {
+                    // TODO：这里处理的不太对
+                    self.reply_propose();
+                }
+            }
+
+        }
+
+
+
+    }
+
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {
+        // lead_consensus is meaning phase one
         let slot = self.instance_number;
-        // TODO: ballot epoch (epoch.0.R) is implicit at beginning of every instance
-        let ballot = self.ballot;
         let interf = self.find_interference(&write_req.key);
         let seq = 1 + self.find_max_seq(&interf);
+        // ballot number start with 0
         let log_entry = LogEntry {
+            ballot: 0,
             key: write_req.key.to_owned(),
             value: write_req.value,
             seq: seq,
@@ -230,8 +212,8 @@ impl EpaxosLogic {
             },
         );
         Payload {
-            // maybe init a unqiue ballot
-            ballot: self.ballot,
+            // every write request start with natural number 0
+            ballot: 0,
             write_req,
             seq,
             deps: interf,
@@ -239,6 +221,7 @@ impl EpaxosLogic {
                 replica: self.id.0,
                 slot,
             },
+            from_leader: CommandLeaderBookKeeping::default(),
         }
     }
 
@@ -249,10 +232,12 @@ impl EpaxosLogic {
         for pre_accept_ok in pre_accept_oks {
             let Payload {
                 ballot,
-                write_req: _,
                 seq,
                 deps,
                 instance: _,
+                command,
+                state,
+                from_leader,
             } = pre_accept_ok.clone();
             if seq == payload.seq && deps == payload.deps {
                 continue;
@@ -278,15 +263,18 @@ impl EpaxosLogic {
             seq,
             deps,
             instance,
+            from_leader,
         } = payload;
         self.instance_number += 1;
         let log_entry = LogEntry {
+            ballot,
             key: write_req.key,
             value: write_req.value,
             seq: seq,
             deps: deps,
             state: State::Committed,
         };
+        self.inst_ballot.insert(instance, ballot);
         self.update_log(
             log_entry,
             &Instance {
@@ -304,17 +292,17 @@ impl EpaxosLogic {
             seq,
             deps,
             instance,
+            from_leader,
         } = payload;
-        // we should judge ballot number is larger or smaller
-
         let log_entry = LogEntry {
-            //TODO: fix the ballot judge
+            ballot,
             key: write_req.key,
             value: write_req.value,
             seq: seq,
             deps: deps,
             state: State::Accepted,
         };
+        self.inst_ballot.insert(instance, ballot);
         self.update_log(
             log_entry,
             &Instance {
@@ -338,8 +326,14 @@ impl EpaxosLogic {
             seq,
             mut deps,
             instance,
+            from_leader,
         } = pre_accept_req.0;
-        let WriteRequest { key, value } = write_req.clone();
+        let WriteRequest {
+            key,
+            value,
+            request_id,
+            timestamp,
+        } = write_req.clone();
         info!("Processing PreAccept for key: {}, value: {}", key, value);
         let interf = self.find_interference(&key);
         let seq_ = cmp::max(seq, 1 + self.find_max_seq(&interf));
@@ -347,6 +341,7 @@ impl EpaxosLogic {
             deps = self.union_deps(deps, interf);
         }
         let log_entry = LogEntry {
+            ballot,
             key: key.to_owned(),
             value: value,
             seq: seq_,
@@ -355,35 +350,34 @@ impl EpaxosLogic {
         };
         // update cmd
         self.update_log(log_entry, &instance);
-        if self.ballot > ballot {
-            return PreAcceptOK(Payload {
-                ballot: self.ballot,
-                write_req: write_req,
-                seq: seq_,
-                deps: deps,
-                instance: instance,
-            });
-        } else {
-
-        }
+        self.inst_ballot.insert(instance, ballot);
         PreAcceptOK(Payload {
             ballot,
             write_req: write_req,
             seq: seq_,
             deps: deps,
             instance: instance,
+            from_leader,
         })
     }
 
     pub fn aware_ballot(&mut self, payload: &Payload) -> Payload {
-        let deps = self.cmds[payload.instance.replica as usize].get(&(payload.instance.slot as usize)).unwrap().deps;
-        
+        let deps = self.cmds[payload.instance.replica as usize]
+            .get(&(payload.instance.slot as usize))
+            .unwrap()
+            .deps;
+
         //TODO: how do i know the max proposql id in my replica
         // how do i construct the Prepare(epoch.(b+1).Q, instance) in the payload.
+        
         Payload::default()
     }
 
-    pub fn decide_prepare(&mut self, replies: Vec<PrepareOKPayload>, payload: &Payload) -> PrepareStage {
+    pub fn decide_prepare(
+        &mut self,
+        replies: Vec<PrepareOKPayload>,
+        payload: &Payload,
+    ) -> PrepareStage {
         if replies.contain(payload) == State::Committed {
             return PrepareStage::Commit(*payload);
         } else if replies.contain(payload) == State::Accepted {
@@ -399,10 +393,12 @@ impl EpaxosLogic {
             // XXX: This is wrong code
             return PrepareStage::PhaseOne(*payload);
         }
-
     }
 
-    pub fn decide_prepare_ok(&mut self, info: Payload) -> Result<PrepareOKPayload, std::fmt::Error> {
+    pub fn reply_prepare_ok(
+        &mut self,
+        info: Payload,
+    ) -> Result<PrepareOKPayload, std::fmt::Error> {
         //TODO: How do i know "epoch.b.Qislargerthanthemostrecentballot number epoch.x.Y accepted for instance L.i "
         return Err(todo!());
     }
@@ -415,9 +411,16 @@ impl EpaxosLogic {
             seq,
             deps,
             instance,
+            from_leader,
         } = accept_req.0;
-        let WriteRequest { key, value } = write_req.clone();
+        let WriteRequest {
+            key,
+            value,
+            request_id,
+            timestamp,
+        } = write_req.clone();
         let log_entry = LogEntry {
+            ballot,
             key: key,
             value: value,
             seq: seq,
@@ -425,6 +428,7 @@ impl EpaxosLogic {
             state: State::Accepted,
         };
         self.update_log(log_entry, &instance);
+        self.inst_ballot.insert(instance, ballot);
         AcceptOK(AcceptOKPayload {
             write_req: write_req,
             instance: instance,
@@ -437,8 +441,10 @@ impl EpaxosLogic {
             seq,
             deps,
             instance,
+            from_leader,
         } = commit_req.0;
         let log_entry = LogEntry {
+            ballot,
             key: write_req.key,
             value: write_req.value,
             seq: seq,
@@ -446,8 +452,13 @@ impl EpaxosLogic {
             state: State::Committed,
         };
         // Update the state in the log to commit
+        self.inst_ballot.insert(instance, ballot);
         self.update_log(log_entry, &instance);
         info!("Committed. My log is {:#?}", self.cmds);
+    }
+
+    fn update_attributes(&self, cmds: Vec<Command>, seq: u32, deps: Vec<Instance>, instance: &Instance) -> (u32, Vec<Instance>, bool) {
+
     }
 
     fn find_interference(&self, key: &String) -> Vec<Instance> {
@@ -488,6 +499,45 @@ impl EpaxosLogic {
             hs.insert(i.slot);
         }
         return hs.len();
+    }
+
+    pub fn _recovery_instance(&self, payload: &mut Payload) {
+
+        //TODO: 这里应加上判断是否有状态
+        let log_entry = self.cmds[payload.instance.replica as usize].get(&(payload.instance.slot as usize));
+        match log_entry {
+            Some(lentry) => {
+                match lentry.state {
+                    State::PreAccepted => {
+                        payload.from_leader.recovery_insts = RecoveryPayload {
+                            ballot: payload.ballot,
+                            write_req: payload.write_req,
+                            seq: payload.seq,
+                            deps: payload.deps,
+                            instance: payload.instance,
+                            pre_accept_count: 1,
+                            command_leader_response: (self.id.0 == payload.instance.replica),
+                        }
+                    },
+                    State::Accepted => {
+                        payload.from_leader.recovery_insts = RecoveryPayload {
+                            ballot: payload.ballot,
+                            write_req: payload.write_req,
+                            seq: payload.seq,
+                            deps: payload.deps,
+                            instance: payload.instance,
+                            pre_accept_count: 0,
+                            command_leader_response: false,
+                        };
+                        payload.from_leader.max_recv_ballot = payload.ballot;
+                    },
+                    _ => unreachable!(),
+                }
+            },
+            None => todo!(),
+        }
+
+        payload.ballot = self.make_ballot_larger_than(payload.ballot);
     }
 
     // Ballot helper function
