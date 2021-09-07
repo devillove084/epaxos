@@ -64,7 +64,7 @@ pub struct InstanceEntry {
     pub deps: Vec<Instance>,
     pub instance: Instance,
     pub state: PayloadState,
-    pub from_leader: CommandLeaderBookKeeping,
+    pub from_leader: Option<CommandLeaderBookKeeping>,
 }
 
 pub struct PreparePayload {
@@ -73,6 +73,7 @@ pub struct PreparePayload {
     pub instance: Instance,
 }
 
+#[derive(Default)]
 pub struct PrepareReplyPayload {
     pub accept_id: u32,
     pub ok: u32,
@@ -152,8 +153,8 @@ pub struct TryPreAcceptReplyPayload {
     pub instance: Instance,
     pub ok: u32,
     pub ballot: u32,
-    pub conflict_instance: Instance,
-    pub conflict_state: State,
+    pub conflict_instance: Option<Instance>,
+    pub conflict_state: Option<State>,
 }
 
 
@@ -194,6 +195,8 @@ pub struct Instance {
 
 pub struct PreAccept(pub PreAcceptPayload);
 
+pub struct Prepare(pub PreparePayload);
+
 pub struct Accept(pub Payload);
 
 pub struct Commit(pub Payload);
@@ -201,6 +204,8 @@ pub struct Commit(pub Payload);
 pub struct PreAcceptOK(pub Payload);
 
 pub struct AcceptOK(pub AcceptOKPayload);
+
+pub struct TryPreAccept(pub TryPreAcceptPayload);
 
 pub enum Path {
     Slow(Payload),
@@ -218,7 +223,7 @@ pub struct CommandLeaderBookKeeping {
     pub nacks: u32,
     pub original_deps: Vec<Instance>,
     pub commited_deps: Vec<Instance>,
-    pub recovery_insts: RecoveryPayloadEntry,
+    pub recovery_insts: Option<RecoveryPayloadEntry>,
     pub preparing: bool,
     pub trying_to_pre_accept: bool,
     pub possible_quorum: Vec<bool>,
@@ -228,12 +233,11 @@ pub struct CommandLeaderBookKeeping {
 
 #[derive(Default, Clone)]
 pub struct RecoveryPayloadEntry {
-    pub ballot: u32,
     //pub write_req: WriteRequest,
-    pub command: Command,
+    pub command: Vec<Command>,
+    pub state: PayloadState,
     pub seq: u32,
     pub deps: Vec<Instance>,
-    pub instance: Instance,
     pub pre_accept_count: u32,
     pub command_leader_response: bool,
 }

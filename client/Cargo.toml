@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["luhuanbing084@gmail.com"]
 license = "MIT"
 description = "A Rust implementation of EPaxos"
-edition = "2018"
+edition = "2021"
 keywords = ["Paxos", "EPaxos"]
 categories = ["RSM"]
 

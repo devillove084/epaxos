@@ -1,4 +1,4 @@
-use crate::{execute::Executor, message::{Command, CommandLeaderBookKeeping, CoreInfo, Instance, InstanceEntry, LogEntry, Path, PayloadState, PreAcceptReplyPayload, ReplicaId, State}};
+use crate::{execute::Executor, message::{Command, CommandLeaderBookKeeping, CoreInfo, Instance, InstanceEntry, LogEntry, Path, PayloadState, PreAcceptReplyPayload, PrepareReplyPayload, ReplicaId, State}};
 
 use super::config::REPLICAS_NUM;
 use log::info;
@@ -188,6 +188,8 @@ impl EpaxosLogic {
 
 
     }
+
+    
 
     pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {
         // lead_consensus is meaning phase one
