@@ -5,48 +5,49 @@ use crate::message::*;
 
 use super::epaxos as grpc; // TODO: Change
 
+// TODO: marco maybe better
+// pub trait GrpcTransform<T> {
+//     fn from_grpc(t: &T) -> Self;
+//     fn to_grpc(&self) -> T;
+// }
+
+
 impl Operation {
     pub fn from_grpc(operation: &grpc::Operation) -> Self {
         match operation {
-            grpc::Operation::PUT => Operation{op: 0},
-            grpc::Operation::PUT_BLIND => Operation{op: 1},
-            grpc::Operation::GET => Operation{op: 2},
+            grpc::Operation::PUT => Operation::Put,
+            grpc::Operation::PUT_BLIND => Operation::PutBlind,
+            grpc::Operation::GET => Operation::Get,
         }
     }
 
     pub fn to_grpc(&self) -> grpc::Operation {
-        if self.op == 0 { // TODO: Match change
-            grpc::Operation::PUT
-        } else if self.op == 1 {
-            grpc::Operation::PUT_BLIND
-        } else { // 2
-            grpc::Operation::GET
+        match self {
+            Operation::Put => grpc::Operation::PUT,
+            Operation::PutBlind => grpc::Operation::PUT_BLIND,
+            Operation::Get => grpc::Operation::GET,
         }
     }
 }
 
-impl PayloadState {
-    pub fn from_grpc(state: &grpc::PayloadState) -> Self {
+impl State {
+    pub fn from_grpc(state: &grpc::State) -> Self {
         match state {
-            grpc::PayloadState::PREACCEPTED => PayloadState{state_num: 0},
-            grpc::PayloadState::PREACCEPTEDEQ => PayloadState{state_num: 1},
-            grpc::PayloadState::ACCEPTED => PayloadState{state_num: 2},
-            grpc::PayloadState::COMMITTED => PayloadState{state_num: 3},
-            grpc::PayloadState::EXECUTED => PayloadState{state_num: 4},
+            grpc::State::PREACCEPTED => State::PreAccepted,
+            grpc::State::PREACCEPTEDEQ => State::PreAcceptedEq,
+            grpc::State::ACCEPTED => State::Accepted,
+            grpc::State::COMMITTED => State::Committed,
+            grpc::State::EXECUTED => State::Executed,
         }
     }
 
-    pub fn to_grpc(&self) -> grpc::PayloadState {
-        if self.state == 0 { // TODO: Change
-            grpc::PayloadState::PREACCEPTED
-        } else if self.state == 1 {
-            grpc::PayloadState::PREACCEPTEDEQ
-        } else if self.state == 2 {
-            grpc::PayloadState::ACCEPTED
-        } else if self.state == 3 {
-            grpc::PayloadState::COMMITTED
-        } else { // 4
-            grpc::PayloadState::EXECUTED
+    pub fn to_grpc(&self) -> grpc::State {
+        match self {
+            State::PreAccepted => grpc::State::PREACCEPTED,
+            State::PreAcceptedEq => grpc::State::PREACCEPTEDEQ,
+            State::Accepted => grpc::State::ACCEPTED,
+            State::Committed => grpc::State::COMMITTED,
+            State::Executed => grpc::State::EXECUTED,
         }
     }
 }
@@ -73,7 +74,7 @@ impl ProposePayload {
     pub fn from_grpc(propose: &grpc::ProposePayload) -> Self {
         ProposePayload {
             command_id: propose.get_command_id(),
-            command: Command::from_grpc(propose.get_command()),
+            command: propose.get_command().iter().map(Command::from_grpc).collect(),
             timestamp: propose.get_timestamp(),
         }
     }
@@ -81,7 +82,9 @@ impl ProposePayload {
     pub fn to_grpc(&self) -> grpc::ProposePayload {
         let mut propose = grpc::ProposePayload::new();
         propose.set_command_id(self.command_id);
-        propose.set_command(self.command.to_grpc());
+        propose.set_command(protobuf::RepeatedField::from_vec(
+            self.command.iter().map(|c| c.to_grpc()).collect(),
+        ));
         propose.set_timestamp(self.timestamp);
         propose
     }
@@ -132,10 +135,10 @@ impl PrepareReplyPayload {
             ok: prepare_reply_payload.get_ok(),
             instance: Instance::from_grpc(prepare_reply_payload.get_instance()),
             ballot: prepare_reply_payload.get_ballot(),
-            state: PayloadState::from_grpc(&prepare_reply_payload.get_state()),
+            state: State::from_grpc(&prepare_reply_payload.get_state()),
             command: prepare_reply_payload.get_command().iter().map(Command::from_grpc).collect(),
             seq:prepare_reply_payload.get_seq(),
-            deps: prepare_reply_payload.get_deps().iter().map(Instance::from_grpc).collect(),
+            deps: prepare_reply_payload.get_deps().to_vec(),
         }
     }
 
@@ -145,14 +148,12 @@ impl PrepareReplyPayload {
         prepare_reply_paylaod.set_ok(self.ok);
         prepare_reply_paylaod.set_instance(Instance::to_grpc(&self.instance));
         prepare_reply_paylaod.set_ballot(self.ballot);
-        prepare_reply_paylaod.set_state(PayloadState::to_grpc(&self.state));
+        prepare_reply_paylaod.set_state(State::to_grpc(&self.state));
         prepare_reply_paylaod.set_command(protobuf::RepeatedField::from_vec(
             self.command.iter().map(|c| c.to_grpc()).collect(),
         ));
         prepare_reply_paylaod.set_seq(self.seq);
-        prepare_reply_paylaod.set_deps(protobuf::RepeatedField::from_vec(
-            self.deps.iter().map(|d| d.to_grpc()).collect(),
-        ));
+        prepare_reply_paylaod.set_deps(self.deps.to_vec());
         prepare_reply_paylaod
     }
 }
@@ -165,7 +166,7 @@ impl PreAcceptPayload {
             ballot: preaccept_payload.get_ballot(),
             command: preaccept_payload.get_command().iter().map(Command::from_grpc).collect(),
             seq: preaccept_payload.get_seq(),
-            deps: preaccept_payload.get_deps().iter().map(Instance::from_grpc).collect(),
+            deps: preaccept_payload.get_deps().to_vec(),
         }
     }
 
@@ -178,9 +179,7 @@ impl PreAcceptPayload {
             self.command.iter().map(|c| c.to_grpc()).collect(),
         ));
         preaccept_payload.set_seq(self.seq);
-        preaccept_payload.set_deps(protobuf::RepeatedField::from_vec(
-            self.deps.iter().map(|dep| dep.to_grpc()).collect(),
-        ));
+        preaccept_payload.set_deps(self.deps.to_vec());
         preaccept_payload
     }
 }
@@ -193,8 +192,8 @@ impl PreAcceptReplyPayload {
             ballot: preaccept_reply_payload.get_ballot(),
             command: preaccept_reply_payload.get_command().iter().map(Command::from_grpc).collect(),
             seq: preaccept_reply_payload.get_seq(),
-            deps: preaccept_reply_payload.get_deps().iter().map(Instance::from_grpc).collect(),
-            commited_deps: preaccept_reply_payload.get_deps().iter().map(Instance::from_grpc).collect(),
+            deps: preaccept_reply_payload.get_deps().to_vec(),
+            commited_deps: preaccept_reply_payload.get_committed_deps().to_vec(),
         }
     }
 
@@ -206,73 +205,147 @@ impl PreAcceptReplyPayload {
         preaccept_reply_payload.set_command(protobuf::RepeatedField::from_vec(
             self.command.iter().map(|c| c.to_grpc()).collect(),
         ));
-        preaccept_reply_payload.set_deps(protobuf::RepeatedField::from_vec(
-            self.deps.iter().map(|dep| dep.to_grpc()).collect(),
-        ));
-        preaccept_reply_payload.set_committed_deps(protobuf::RepeatedField::from_vec(
-            self.commited_deps.iter().map(|dep| dep.to_grpc()).collect(),
-        ));
+        preaccept_reply_payload.set_deps(self.deps.to_vec());
+        preaccept_reply_payload.set_committed_deps(self.commited_deps.to_vec());
         preaccept_reply_payload
     }
 }
 
 impl AcceptPayload {
     pub fn from_grpc(accept_payload: &grpc::AcceptPayload) -> Self {
-
+        AcceptPayload {
+            leader_id: accept_payload.get_leader_id(),
+            instance: Instance::from_grpc(accept_payload.get_instance()),
+            ballot: accept_payload.get_ballot(),
+            count: accept_payload.get_count(),
+            seq: accept_payload.get_seq(),
+            deps: accept_payload.get_deps().to_vec(),
+        }
     }
 
     pub fn to_grpc(&self) -> grpc::AcceptPayload {
-
+        let mut accept_payload = grpc::AcceptPayload::new();
+        accept_payload.set_ballot(self.ballot);
+        accept_payload.set_count(self.count);
+        accept_payload.set_deps(self.deps.to_vec());
+        accept_payload.set_instance(self.instance.to_grpc());
+        accept_payload.set_leader_id(self.leader_id);
+        accept_payload.set_seq(self.seq);
+        accept_payload
     }
 }
 
 impl AcceptReplyPayload {
     pub fn from_grpc(accept_reply_payload: &grpc::AcceptReplyPayload) -> Self {
-
+        AcceptReplyPayload {
+            instance: Instance::from_grpc(accept_reply_payload.get_instance()),
+            ok: accept_reply_payload.get_ok(),
+            ballot: accept_reply_payload.get_ballot(),
+        }
     }
 
     pub fn to_grpc(&self) -> grpc::AcceptReplyPayload {
-
+        let mut accept_reply_payload = grpc::AcceptReplyPayload::new();
+        accept_reply_payload.set_instance(self.instance.to_grpc());
+        accept_reply_payload.set_ballot(self.ballot);
+        accept_reply_payload.set_ok(self.ok);
+        accept_reply_payload
     }
 }
 
 impl CommitPayload {
     pub fn from_grpc(commit_payload: &grpc::CommitPayload) -> Self {
-
+        CommitPayload {
+            leader_id: commit_payload.get_leader_id(),
+            instance: Instance::from_grpc(commit_payload.get_instance()),
+            command: commit_payload.get_command().iter().map(Command::from_grpc).collect(),
+            seq: commit_payload.get_seq(),
+            deps: commit_payload.get_deps().to_vec(),
+        }
     }
 
     pub fn to_grpc(&self) -> grpc::CommitPayload {
-
+        let mut commit_payload = grpc::CommitPayload::new();
+        commit_payload.set_command(protobuf::RepeatedField::from_vec(
+            self.command.iter().map(|command| command.to_grpc()).collect(),
+        ));
+        commit_payload.set_deps(self.deps.to_vec());
+        commit_payload.set_instance(self.instance.to_grpc());
+        commit_payload.set_leader_id(self.leader_id);
+        commit_payload.set_seq(self.seq);
+        commit_payload
     }
 }
 
 impl CommitShortPayload {
     pub fn from_grpc(commit_short_payload: &grpc::CommitShortPayload) -> Self {
-
+        CommitShortPayload {
+            leader_id: commit_short_payload.get_leader_id(),
+            instance: Instance::from_grpc(commit_short_payload.get_instance()),
+            count: commit_short_payload.get_count(),
+            seq: commit_short_payload.get_count(),
+            deps: commit_short_payload.get_deps().to_vec(),
+        }
     }
 
     pub fn to_grpc(&self) -> grpc::CommitShortPayload {
-
+        let mut commit_short_payload = grpc::CommitShortPayload::new();
+        commit_short_payload.set_count(self.count);
+        commit_short_payload.set_deps(self.deps.to_vec());
+        commit_short_payload.set_instance(self.instance.to_grpc());
+        commit_short_payload.set_leader_id(self.leader_id);
+        commit_short_payload.set_seq(self.seq);
+        commit_short_payload
     }
 }
 
 impl TryPreAcceptPayload {
     pub fn from_grpc(try_pre_accept_payload: &grpc::TryPreAcceptPayload) -> Self {
-
+        TryPreAcceptPayload {
+            leader_id: try_pre_accept_payload.get_leader_id(),
+            instance: Instance::from_grpc(try_pre_accept_payload.get_instance()),
+            ballot: try_pre_accept_payload.get_ballot(),
+            command: try_pre_accept_payload.get_command().iter().map(Command::from_grpc).collect(),
+            seq: try_pre_accept_payload.get_seq(),
+            deps: try_pre_accept_payload.get_deps().to_vec(),
+        }
     }
 
     pub fn to_grpc(&self) -> grpc::TryPreAcceptPayload {
-
+        let mut try_pre_accept_payload = grpc::TryPreAcceptPayload::new();
+        try_pre_accept_payload.set_ballot(self.ballot);
+        try_pre_accept_payload.set_command(protobuf::RepeatedField::from_vec(
+            self.command.iter().map(|c| c.to_grpc()).collect(),
+        ));
+        try_pre_accept_payload.set_deps(self.deps.to_vec());
+        try_pre_accept_payload.set_instance(self.instance.to_grpc());
+        try_pre_accept_payload.set_leader_id(self.leader_id);
+        try_pre_accept_payload.set_seq(self.seq);
+        try_pre_accept_payload
     }
 }
 
 impl TryPreAcceptReplyPayload {
     pub fn from_grpc(try_pre_accept_reply_payload: &grpc::TryPreAcceptReplyPayload) -> Self {
-
+        TryPreAcceptReplyPayload {
+            accept_id: try_pre_accept_reply_payload.get_accept_id(),
+            instance: Instance::from_grpc(try_pre_accept_reply_payload.get_instance()),
+            ok: try_pre_accept_reply_payload.get_ok(),
+            ballot: try_pre_accept_reply_payload.get_ballot(),
+            conflict_instance: Some(Instance::from_grpc(try_pre_accept_reply_payload.get_conflict_instance())),
+            conflict_state: Some(State::from_grpc(&try_pre_accept_reply_payload.get_conflict_state())),
+        }
     }
 
     pub fn to_grpc(&self) -> grpc::TryPreAcceptReplyPayload {
-
+        let mut try_pre_accept_reply_payload = grpc::TryPreAcceptReplyPayload::new();
+        try_pre_accept_reply_payload.set_accept_id(self.accept_id);
+        try_pre_accept_reply_payload.set_ballot(self.ballot);
+        try_pre_accept_reply_payload.set_conflict_instance(self.conflict_instance.unwrap().to_grpc());
+        try_pre_accept_reply_payload.set_conflict_state(self.conflict_state.unwrap().to_grpc());
+        try_pre_accept_reply_payload.set_instance(self.instance.to_grpc());
+        try_pre_accept_reply_payload.set_ok(self.ok);
+        try_pre_accept_reply_payload
     }
 }
 
@@ -372,7 +445,7 @@ impl TryPreAcceptReplyPayload {
 //             seq: payload.get_seq(),
 //             deps: payload.get_deps().iter().map(Instance::from_grpc).collect(),
 //             instance: Instance::from_grpc(payload.get_instance()),
-//             state: PayloadState::from_grpc(&payload.get_state()),
+//             state: State::from_grpc(&payload.get_state()),
 //             from_leader: CommandLeaderBookKeeping::from_grpc(payload.get_clbk()),
 //         }
 //     }

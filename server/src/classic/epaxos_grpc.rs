@@ -44,7 +44,7 @@ const METHOD_EPAXOS_SERVICE_COMMITSHORT: ::grpcio::Method<super::epaxos::CommitS
     resp_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
 };
 
-const METHOD_EPAXOS_SERVICE_PROPOSE: ::grpcio::Method<super::epaxos::ProposePayload, super::epaxos::ProposeReplyPayload> = ::grpcio::Method {
+const METHOD_EPAXOS_SERVICE_PROPOSE: ::grpcio::Method<super::epaxos::ProposePayload, super::epaxos::Empty> = ::grpcio::Method {
     ty: ::grpcio::MethodType::Unary,
     name: "/epaxos.EpaxosService/propose",
     req_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
@@ -141,19 +141,19 @@ impl EpaxosServiceClient {
         self.commitshort_async_opt(req, ::grpcio::CallOption::default())
     }
 
-    pub fn propose_opt(&self, req: &super::epaxos::ProposePayload, opt: ::grpcio::CallOption) -> ::grpcio::Result<super::epaxos::ProposeReplyPayload> {
+    pub fn propose_opt(&self, req: &super::epaxos::ProposePayload, opt: ::grpcio::CallOption) -> ::grpcio::Result<super::epaxos::Empty> {
         self.client.unary_call(&METHOD_EPAXOS_SERVICE_PROPOSE, req, opt)
     }
 
-    pub fn propose(&self, req: &super::epaxos::ProposePayload) -> ::grpcio::Result<super::epaxos::ProposeReplyPayload> {
+    pub fn propose(&self, req: &super::epaxos::ProposePayload) -> ::grpcio::Result<super::epaxos::Empty> {
         self.propose_opt(req, ::grpcio::CallOption::default())
     }
 
-    pub fn propose_async_opt(&self, req: &super::epaxos::ProposePayload, opt: ::grpcio::CallOption) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::epaxos::ProposeReplyPayload>> {
+    pub fn propose_async_opt(&self, req: &super::epaxos::ProposePayload, opt: ::grpcio::CallOption) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::epaxos::Empty>> {
         self.client.unary_call_async(&METHOD_EPAXOS_SERVICE_PROPOSE, req, opt)
     }
 
-    pub fn propose_async(&self, req: &super::epaxos::ProposePayload) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::epaxos::ProposeReplyPayload>> {
+    pub fn propose_async(&self, req: &super::epaxos::ProposePayload) -> ::grpcio::Result<::grpcio::ClientUnaryReceiver<super::epaxos::Empty>> {
         self.propose_async_opt(req, ::grpcio::CallOption::default())
     }
 
@@ -198,7 +198,7 @@ pub trait EpaxosService {
     fn accept(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::AcceptPayload, sink: ::grpcio::UnarySink<super::epaxos::AcceptReplyPayload>);
     fn commit(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::CommitPayload, sink: ::grpcio::UnarySink<super::epaxos::Empty>);
     fn commitshort(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::CommitShortPayload, sink: ::grpcio::UnarySink<super::epaxos::Empty>);
-    fn propose(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::ProposePayload, sink: ::grpcio::UnarySink<super::epaxos::ProposeReplyPayload>);
+    fn propose(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::ProposePayload, sink: ::grpcio::UnarySink<super::epaxos::Empty>);
     fn prepare(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::PreparePayload, sink: ::grpcio::UnarySink<super::epaxos::PrepareReplyPayload>);
     fn try_pre_accept(&mut self, ctx: ::grpcio::RpcContext, req: super::epaxos::TryPreAcceptPayload, sink: ::grpcio::UnarySink<super::epaxos::TryPreAcceptReplyPayload>);
 }

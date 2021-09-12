@@ -252,7 +252,7 @@ impl ::protobuf::reflect::ProtobufValue for Command {
 pub struct ProposePayload {
     // message fields
     pub command_id: u32,
-    pub command: ::protobuf::SingularPtrField<Command>,
+    pub command: ::protobuf::RepeatedField<Command>,
     pub timestamp: u64,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
@@ -285,37 +285,29 @@ impl ProposePayload {
         self.command_id = v;
     }
 
-    // .epaxos.Command command = 2;
+    // repeated .epaxos.Command command = 2;
 
 
-    pub fn get_command(&self) -> &Command {
-        self.command.as_ref().unwrap_or_else(|| <Command as ::protobuf::Message>::default_instance())
+    pub fn get_command(&self) -> &[Command] {
+        &self.command
     }
     pub fn clear_command(&mut self) {
         self.command.clear();
     }
 
-    pub fn has_command(&self) -> bool {
-        self.command.is_some()
-    }
-
     // Param is passed by value, moved
-    pub fn set_command(&mut self, v: Command) {
-        self.command = ::protobuf::SingularPtrField::some(v);
+    pub fn set_command(&mut self, v: ::protobuf::RepeatedField<Command>) {
+        self.command = v;
     }
 
     // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_command(&mut self) -> &mut Command {
-        if self.command.is_none() {
-            self.command.set_default();
-        }
-        self.command.as_mut().unwrap()
+    pub fn mut_command(&mut self) -> &mut ::protobuf::RepeatedField<Command> {
+        &mut self.command
     }
 
     // Take field
-    pub fn take_command(&mut self) -> Command {
-        self.command.take().unwrap_or_else(|| Command::new())
+    pub fn take_command(&mut self) -> ::protobuf::RepeatedField<Command> {
+        ::std::mem::replace(&mut self.command, ::protobuf::RepeatedField::new())
     }
 
     // uint64 timestamp = 3;
@@ -356,7 +348,7 @@ impl ::protobuf::Message for ProposePayload {
                     self.command_id = tmp;
                 },
                 2 => {
-                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.command)?;
+                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.command)?;
                 },
                 3 => {
                     if wire_type != ::protobuf::wire_format::WireTypeVarint {
@@ -380,10 +372,10 @@ impl ::protobuf::Message for ProposePayload {
         if self.command_id != 0 {
             my_size += ::protobuf::rt::value_size(1, self.command_id, ::protobuf::wire_format::WireTypeVarint);
         }
-        if let Some(ref v) = self.command.as_ref() {
-            let len = v.compute_size();
+        for value in &self.command {
+            let len = value.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
-        }
+        };
         if self.timestamp != 0 {
             my_size += ::protobuf::rt::value_size(3, self.timestamp, ::protobuf::wire_format::WireTypeVarint);
         }
@@ -396,11 +388,11 @@ impl ::protobuf::Message for ProposePayload {
         if self.command_id != 0 {
             os.write_uint32(1, self.command_id)?;
         }
-        if let Some(ref v) = self.command.as_ref() {
+        for v in &self.command {
             os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited)?;
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
-        }
+        };
         if self.timestamp != 0 {
             os.write_uint64(3, self.timestamp)?;
         }
@@ -447,7 +439,7 @@ impl ::protobuf::Message for ProposePayload {
                 |m: &ProposePayload| { &m.command_id },
                 |m: &mut ProposePayload| { &mut m.command_id },
             ));
-            fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Command>>(
+            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Command>>(
                 "command",
                 |m: &ProposePayload| { &m.command },
                 |m: &mut ProposePayload| { &mut m.command },
@@ -944,7 +936,7 @@ pub struct PreAcceptPayload {
     pub ballot: u32,
     pub command: ::protobuf::RepeatedField<Command>,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -1064,10 +1056,10 @@ impl PreAcceptPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 6;
+    // repeated uint32 deps = 6;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -1075,18 +1067,18 @@ impl PreAcceptPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 }
 
@@ -1098,11 +1090,6 @@ impl ::protobuf::Message for PreAcceptPayload {
             }
         };
         for v in &self.command {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -1142,7 +1129,7 @@ impl ::protobuf::Message for PreAcceptPayload {
                     self.seq = tmp;
                 },
                 6 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1174,8 +1161,7 @@ impl ::protobuf::Message for PreAcceptPayload {
             my_size += ::protobuf::rt::value_size(5, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(6, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1203,9 +1189,7 @@ impl ::protobuf::Message for PreAcceptPayload {
             os.write_uint32(5, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(6, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(6, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1270,7 +1254,7 @@ impl ::protobuf::Message for PreAcceptPayload {
                 |m: &PreAcceptPayload| { &m.seq },
                 |m: &mut PreAcceptPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &PreAcceptPayload| { &m.deps },
                 |m: &mut PreAcceptPayload| { &mut m.deps },
@@ -1321,8 +1305,8 @@ pub struct PreAcceptReplyPayload {
     pub ballot: u32,
     pub command: ::protobuf::RepeatedField<Command>,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
-    pub committed_deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
+    pub committed_deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -1442,10 +1426,10 @@ impl PreAcceptReplyPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 6;
+    // repeated uint32 deps = 6;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -1453,24 +1437,24 @@ impl PreAcceptReplyPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 
-    // repeated .epaxos.Instance committed_deps = 7;
+    // repeated uint32 committed_deps = 7;
 
 
-    pub fn get_committed_deps(&self) -> &[Instance] {
+    pub fn get_committed_deps(&self) -> &[u32] {
         &self.committed_deps
     }
     pub fn clear_committed_deps(&mut self) {
@@ -1478,18 +1462,18 @@ impl PreAcceptReplyPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_committed_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_committed_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.committed_deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_committed_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_committed_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.committed_deps
     }
 
     // Take field
-    pub fn take_committed_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.committed_deps, ::protobuf::RepeatedField::new())
+    pub fn take_committed_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.committed_deps, ::std::vec::Vec::new())
     }
 }
 
@@ -1501,16 +1485,6 @@ impl ::protobuf::Message for PreAcceptReplyPayload {
             }
         };
         for v in &self.command {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.committed_deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -1550,10 +1524,10 @@ impl ::protobuf::Message for PreAcceptReplyPayload {
                     self.seq = tmp;
                 },
                 6 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 7 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.committed_deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.committed_deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1585,12 +1559,10 @@ impl ::protobuf::Message for PreAcceptReplyPayload {
             my_size += ::protobuf::rt::value_size(5, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(6, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         for value in &self.committed_deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(7, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1618,14 +1590,10 @@ impl ::protobuf::Message for PreAcceptReplyPayload {
             os.write_uint32(5, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(6, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(6, *v)?;
         };
         for v in &self.committed_deps {
-            os.write_tag(7, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(7, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1690,12 +1658,12 @@ impl ::protobuf::Message for PreAcceptReplyPayload {
                 |m: &PreAcceptReplyPayload| { &m.seq },
                 |m: &mut PreAcceptReplyPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &PreAcceptReplyPayload| { &m.deps },
                 |m: &mut PreAcceptReplyPayload| { &mut m.deps },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "committed_deps",
                 |m: &PreAcceptReplyPayload| { &m.committed_deps },
                 |m: &mut PreAcceptReplyPayload| { &mut m.committed_deps },
@@ -1921,7 +1889,7 @@ pub struct AcceptPayload {
     pub ballot: u32,
     pub count: u32,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -2031,10 +1999,10 @@ impl AcceptPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 6;
+    // repeated uint32 deps = 6;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -2042,29 +2010,24 @@ impl AcceptPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 }
 
 impl ::protobuf::Message for AcceptPayload {
     fn is_initialized(&self) -> bool {
         for v in &self.instance {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -2108,7 +2071,7 @@ impl ::protobuf::Message for AcceptPayload {
                     self.seq = tmp;
                 },
                 6 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -2139,8 +2102,7 @@ impl ::protobuf::Message for AcceptPayload {
             my_size += ::protobuf::rt::value_size(5, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(6, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2166,9 +2128,7 @@ impl ::protobuf::Message for AcceptPayload {
             os.write_uint32(5, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(6, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(6, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -2233,7 +2193,7 @@ impl ::protobuf::Message for AcceptPayload {
                 |m: &AcceptPayload| { &m.seq },
                 |m: &mut AcceptPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &AcceptPayload| { &m.deps },
                 |m: &mut AcceptPayload| { &mut m.deps },
@@ -2527,7 +2487,7 @@ pub struct CommitPayload {
     pub instance: ::protobuf::SingularPtrField<Instance>,
     pub command: ::protobuf::RepeatedField<Command>,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -2632,10 +2592,10 @@ impl CommitPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 5;
+    // repeated uint32 deps = 5;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -2643,18 +2603,18 @@ impl CommitPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 }
 
@@ -2666,11 +2626,6 @@ impl ::protobuf::Message for CommitPayload {
             }
         };
         for v in &self.command {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -2703,7 +2658,7 @@ impl ::protobuf::Message for CommitPayload {
                     self.seq = tmp;
                 },
                 5 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -2732,8 +2687,7 @@ impl ::protobuf::Message for CommitPayload {
             my_size += ::protobuf::rt::value_size(4, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(5, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -2758,9 +2712,7 @@ impl ::protobuf::Message for CommitPayload {
             os.write_uint32(4, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(5, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(5, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -2820,7 +2772,7 @@ impl ::protobuf::Message for CommitPayload {
                 |m: &CommitPayload| { &m.seq },
                 |m: &mut CommitPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &CommitPayload| { &m.deps },
                 |m: &mut CommitPayload| { &mut m.deps },
@@ -2869,7 +2821,7 @@ pub struct CommitShortPayload {
     pub instance: ::protobuf::SingularPtrField<Instance>,
     pub count: u32,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -2964,10 +2916,10 @@ impl CommitShortPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 5;
+    // repeated uint32 deps = 5;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -2975,29 +2927,24 @@ impl CommitShortPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 }
 
 impl ::protobuf::Message for CommitShortPayload {
     fn is_initialized(&self) -> bool {
         for v in &self.instance {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -3034,7 +2981,7 @@ impl ::protobuf::Message for CommitShortPayload {
                     self.seq = tmp;
                 },
                 5 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -3062,8 +3009,7 @@ impl ::protobuf::Message for CommitShortPayload {
             my_size += ::protobuf::rt::value_size(4, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(5, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -3086,9 +3032,7 @@ impl ::protobuf::Message for CommitShortPayload {
             os.write_uint32(4, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(5, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(5, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -3148,7 +3092,7 @@ impl ::protobuf::Message for CommitShortPayload {
                 |m: &CommitShortPayload| { &m.seq },
                 |m: &mut CommitShortPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &CommitShortPayload| { &m.deps },
                 |m: &mut CommitShortPayload| { &mut m.deps },
@@ -3441,10 +3385,10 @@ pub struct PrepareReplyPayload {
     pub ok: u32,
     pub instance: ::protobuf::SingularPtrField<Instance>,
     pub ballot: u32,
-    pub state: PayloadState,
+    pub state: State,
     pub command: ::protobuf::RepeatedField<Command>,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -3539,18 +3483,18 @@ impl PrepareReplyPayload {
         self.ballot = v;
     }
 
-    // .epaxos.PayloadState state = 5;
+    // .epaxos.State state = 5;
 
 
-    pub fn get_state(&self) -> PayloadState {
+    pub fn get_state(&self) -> State {
         self.state
     }
     pub fn clear_state(&mut self) {
-        self.state = PayloadState::PREACCEPTED;
+        self.state = State::PREACCEPTED;
     }
 
     // Param is passed by value, moved
-    pub fn set_state(&mut self, v: PayloadState) {
+    pub fn set_state(&mut self, v: State) {
         self.state = v;
     }
 
@@ -3594,10 +3538,10 @@ impl PrepareReplyPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 8;
+    // repeated uint32 deps = 8;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -3605,18 +3549,18 @@ impl PrepareReplyPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 }
 
@@ -3628,11 +3572,6 @@ impl ::protobuf::Message for PrepareReplyPayload {
             }
         };
         for v in &self.command {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -3682,7 +3621,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
                     self.seq = tmp;
                 },
                 8 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -3709,7 +3648,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
         if self.ballot != 0 {
             my_size += ::protobuf::rt::value_size(4, self.ballot, ::protobuf::wire_format::WireTypeVarint);
         }
-        if self.state != PayloadState::PREACCEPTED {
+        if self.state != State::PREACCEPTED {
             my_size += ::protobuf::rt::enum_size(5, self.state);
         }
         for value in &self.command {
@@ -3720,8 +3659,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
             my_size += ::protobuf::rt::value_size(7, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(8, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -3743,7 +3681,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
         if self.ballot != 0 {
             os.write_uint32(4, self.ballot)?;
         }
-        if self.state != PayloadState::PREACCEPTED {
+        if self.state != State::PREACCEPTED {
             os.write_enum(5, ::protobuf::ProtobufEnum::value(&self.state))?;
         }
         for v in &self.command {
@@ -3755,9 +3693,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
             os.write_uint32(7, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(8, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(8, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -3817,7 +3753,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
                 |m: &PrepareReplyPayload| { &m.ballot },
                 |m: &mut PrepareReplyPayload| { &mut m.ballot },
             ));
-            fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeEnum<PayloadState>>(
+            fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeEnum<State>>(
                 "state",
                 |m: &PrepareReplyPayload| { &m.state },
                 |m: &mut PrepareReplyPayload| { &mut m.state },
@@ -3832,7 +3768,7 @@ impl ::protobuf::Message for PrepareReplyPayload {
                 |m: &PrepareReplyPayload| { &m.seq },
                 |m: &mut PrepareReplyPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &PrepareReplyPayload| { &m.deps },
                 |m: &mut PrepareReplyPayload| { &mut m.deps },
@@ -3857,7 +3793,7 @@ impl ::protobuf::Clear for PrepareReplyPayload {
         self.ok = 0;
         self.instance.clear();
         self.ballot = 0;
-        self.state = PayloadState::PREACCEPTED;
+        self.state = State::PREACCEPTED;
         self.command.clear();
         self.seq = 0;
         self.deps.clear();
@@ -3885,7 +3821,7 @@ pub struct TryPreAcceptPayload {
     pub ballot: u32,
     pub command: ::protobuf::RepeatedField<Command>,
     pub seq: u32,
-    pub deps: ::protobuf::RepeatedField<Instance>,
+    pub deps: ::std::vec::Vec<u32>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -4005,10 +3941,10 @@ impl TryPreAcceptPayload {
         self.seq = v;
     }
 
-    // repeated .epaxos.Instance deps = 6;
+    // repeated uint32 deps = 6;
 
 
-    pub fn get_deps(&self) -> &[Instance] {
+    pub fn get_deps(&self) -> &[u32] {
         &self.deps
     }
     pub fn clear_deps(&mut self) {
@@ -4016,18 +3952,18 @@ impl TryPreAcceptPayload {
     }
 
     // Param is passed by value, moved
-    pub fn set_deps(&mut self, v: ::protobuf::RepeatedField<Instance>) {
+    pub fn set_deps(&mut self, v: ::std::vec::Vec<u32>) {
         self.deps = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_deps(&mut self) -> &mut ::protobuf::RepeatedField<Instance> {
+    pub fn mut_deps(&mut self) -> &mut ::std::vec::Vec<u32> {
         &mut self.deps
     }
 
     // Take field
-    pub fn take_deps(&mut self) -> ::protobuf::RepeatedField<Instance> {
-        ::std::mem::replace(&mut self.deps, ::protobuf::RepeatedField::new())
+    pub fn take_deps(&mut self) -> ::std::vec::Vec<u32> {
+        ::std::mem::replace(&mut self.deps, ::std::vec::Vec::new())
     }
 }
 
@@ -4039,11 +3975,6 @@ impl ::protobuf::Message for TryPreAcceptPayload {
             }
         };
         for v in &self.command {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.deps {
             if !v.is_initialized() {
                 return false;
             }
@@ -4083,7 +4014,7 @@ impl ::protobuf::Message for TryPreAcceptPayload {
                     self.seq = tmp;
                 },
                 6 => {
-                    ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.deps)?;
+                    ::protobuf::rt::read_repeated_uint32_into(wire_type, is, &mut self.deps)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -4115,8 +4046,7 @@ impl ::protobuf::Message for TryPreAcceptPayload {
             my_size += ::protobuf::rt::value_size(5, self.seq, ::protobuf::wire_format::WireTypeVarint);
         }
         for value in &self.deps {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::value_size(6, *value, ::protobuf::wire_format::WireTypeVarint);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -4144,9 +4074,7 @@ impl ::protobuf::Message for TryPreAcceptPayload {
             os.write_uint32(5, self.seq)?;
         }
         for v in &self.deps {
-            os.write_tag(6, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_uint32(6, *v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -4211,7 +4139,7 @@ impl ::protobuf::Message for TryPreAcceptPayload {
                 |m: &TryPreAcceptPayload| { &m.seq },
                 |m: &mut TryPreAcceptPayload| { &mut m.seq },
             ));
-            fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<Instance>>(
+            fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeUint32>(
                 "deps",
                 |m: &TryPreAcceptPayload| { &m.deps },
                 |m: &mut TryPreAcceptPayload| { &mut m.deps },
@@ -4262,7 +4190,7 @@ pub struct TryPreAcceptReplyPayload {
     pub ok: u32,
     pub ballot: u32,
     pub conflict_instance: ::protobuf::SingularPtrField<Instance>,
-    pub conflict_state: PayloadState,
+    pub conflict_state: State,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -4390,18 +4318,18 @@ impl TryPreAcceptReplyPayload {
         self.conflict_instance.take().unwrap_or_else(|| Instance::new())
     }
 
-    // .epaxos.PayloadState conflict_state = 6;
+    // .epaxos.State conflict_state = 6;
 
 
-    pub fn get_conflict_state(&self) -> PayloadState {
+    pub fn get_conflict_state(&self) -> State {
         self.conflict_state
     }
     pub fn clear_conflict_state(&mut self) {
-        self.conflict_state = PayloadState::PREACCEPTED;
+        self.conflict_state = State::PREACCEPTED;
     }
 
     // Param is passed by value, moved
-    pub fn set_conflict_state(&mut self, v: PayloadState) {
+    pub fn set_conflict_state(&mut self, v: State) {
         self.conflict_state = v;
     }
 }
@@ -4484,7 +4412,7 @@ impl ::protobuf::Message for TryPreAcceptReplyPayload {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         }
-        if self.conflict_state != PayloadState::PREACCEPTED {
+        if self.conflict_state != State::PREACCEPTED {
             my_size += ::protobuf::rt::enum_size(6, self.conflict_state);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -4512,7 +4440,7 @@ impl ::protobuf::Message for TryPreAcceptReplyPayload {
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         }
-        if self.conflict_state != PayloadState::PREACCEPTED {
+        if self.conflict_state != State::PREACCEPTED {
             os.write_enum(6, ::protobuf::ProtobufEnum::value(&self.conflict_state))?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
@@ -4578,7 +4506,7 @@ impl ::protobuf::Message for TryPreAcceptReplyPayload {
                 |m: &TryPreAcceptReplyPayload| { &m.conflict_instance },
                 |m: &mut TryPreAcceptReplyPayload| { &mut m.conflict_instance },
             ));
-            fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeEnum<PayloadState>>(
+            fields.push(::protobuf::reflect::accessor::make_simple_field_accessor::<_, ::protobuf::types::ProtobufTypeEnum<State>>(
                 "conflict_state",
                 |m: &TryPreAcceptReplyPayload| { &m.conflict_state },
                 |m: &mut TryPreAcceptReplyPayload| { &mut m.conflict_state },
@@ -4604,7 +4532,7 @@ impl ::protobuf::Clear for TryPreAcceptReplyPayload {
         self.ok = 0;
         self.ballot = 0;
         self.conflict_instance.clear();
-        self.conflict_state = PayloadState::PREACCEPTED;
+        self.conflict_state = State::PREACCEPTED;
         self.unknown_fields.clear();
     }
 }
@@ -4791,7 +4719,7 @@ impl ::protobuf::reflect::ProtobufValue for Operation {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
-pub enum PayloadState {
+pub enum State {
     PREACCEPTED = 0,
     PREACCEPTEDEQ = 1,
     ACCEPTED = 2,
@@ -4799,29 +4727,29 @@ pub enum PayloadState {
     EXECUTED = 4,
 }
 
-impl ::protobuf::ProtobufEnum for PayloadState {
+impl ::protobuf::ProtobufEnum for State {
     fn value(&self) -> i32 {
         *self as i32
     }
 
-    fn from_i32(value: i32) -> ::std::option::Option<PayloadState> {
+    fn from_i32(value: i32) -> ::std::option::Option<State> {
         match value {
-            0 => ::std::option::Option::Some(PayloadState::PREACCEPTED),
-            1 => ::std::option::Option::Some(PayloadState::PREACCEPTEDEQ),
-            2 => ::std::option::Option::Some(PayloadState::ACCEPTED),
-            3 => ::std::option::Option::Some(PayloadState::COMMITTED),
-            4 => ::std::option::Option::Some(PayloadState::EXECUTED),
+            0 => ::std::option::Option::Some(State::PREACCEPTED),
+            1 => ::std::option::Option::Some(State::PREACCEPTEDEQ),
+            2 => ::std::option::Option::Some(State::ACCEPTED),
+            3 => ::std::option::Option::Some(State::COMMITTED),
+            4 => ::std::option::Option::Some(State::EXECUTED),
             _ => ::std::option::Option::None
         }
     }
 
     fn values() -> &'static [Self] {
-        static values: &'static [PayloadState] = &[
-            PayloadState::PREACCEPTED,
-            PayloadState::PREACCEPTEDEQ,
-            PayloadState::ACCEPTED,
-            PayloadState::COMMITTED,
-            PayloadState::EXECUTED,
+        static values: &'static [State] = &[
+            State::PREACCEPTED,
+            State::PREACCEPTEDEQ,
+            State::ACCEPTED,
+            State::COMMITTED,
+            State::EXECUTED,
         ];
         values
     }
@@ -4829,21 +4757,21 @@ impl ::protobuf::ProtobufEnum for PayloadState {
     fn enum_descriptor_static() -> &'static ::protobuf::reflect::EnumDescriptor {
         static descriptor: ::protobuf::rt::LazyV2<::protobuf::reflect::EnumDescriptor> = ::protobuf::rt::LazyV2::INIT;
         descriptor.get(|| {
-            ::protobuf::reflect::EnumDescriptor::new_pb_name::<PayloadState>("PayloadState", file_descriptor_proto())
+            ::protobuf::reflect::EnumDescriptor::new_pb_name::<State>("State", file_descriptor_proto())
         })
     }
 }
 
-impl ::std::marker::Copy for PayloadState {
+impl ::std::marker::Copy for State {
 }
 
-impl ::std::default::Default for PayloadState {
+impl ::std::default::Default for State {
     fn default() -> Self {
-        PayloadState::PREACCEPTED
+        State::PREACCEPTED
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for PayloadState {
+impl ::protobuf::reflect::ProtobufValue for State {
     fn as_ref(&self) -> ::protobuf::reflect::ReflectValueRef {
         ::protobuf::reflect::ReflectValueRef::Enum(::protobuf::ProtobufEnum::descriptor(self))
     }
@@ -4854,78 +4782,75 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x20\x01(\x0e2\x11.epaxos.OperationR\x02op\x12\x10\n\x03key\x18\x02\x20\
     \x01(\tR\x03key\x12\x14\n\x05value\x18\x03\x20\x01(\x05R\x05value\"x\n\
     \x0eProposePayload\x12\x1d\n\ncommand_id\x18\x01\x20\x01(\rR\tcommandId\
-    \x12)\n\x07command\x18\x02\x20\x01(\x0b2\x0f.epaxos.CommandR\x07command\
+    \x12)\n\x07command\x18\x02\x20\x03(\x0b2\x0f.epaxos.CommandR\x07command\
     \x12\x1c\n\ttimestamp\x18\x03\x20\x01(\x04R\ttimestamp\"x\n\x13ProposeRe\
     plyPayload\x12\x0e\n\x02ok\x18\x01\x20\x01(\x08R\x02ok\x12\x1d\n\ncomman\
     d_id\x18\x02\x20\x01(\rR\tcommandId\x12\x14\n\x05value\x18\x03\x20\x01(\
     \x05R\x05value\x12\x1c\n\ttimestamp\x18\x04\x20\x01(\x04R\ttimestamp\"8\
     \n\x08Instance\x12\x18\n\x07replica\x18\x01\x20\x01(\rR\x07replica\x12\
-    \x12\n\x04slot\x18\x02\x20\x01(\rR\x04slot\"\xd8\x01\n\x10PreAcceptPaylo\
+    \x12\n\x04slot\x18\x02\x20\x01(\rR\x04slot\"\xc6\x01\n\x10PreAcceptPaylo\
     ad\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08leaderId\x12,\n\x08instan\
     ce\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\x16\n\x06b\
     allot\x18\x03\x20\x01(\rR\x06ballot\x12)\n\x07command\x18\x04\x20\x03(\
     \x0b2\x0f.epaxos.CommandR\x07command\x12\x10\n\x03seq\x18\x05\x20\x01(\r\
-    R\x03seq\x12$\n\x04deps\x18\x06\x20\x03(\x0b2\x10.epaxos.InstanceR\x04de\
-    ps\"\x89\x02\n\x15PreAcceptReplyPayload\x12,\n\x08instance\x18\x01\x20\
-    \x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\x0e\n\x02ok\x18\x02\x20\
-    \x01(\rR\x02ok\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\x12)\n\
-    \x07command\x18\x04\x20\x03(\x0b2\x0f.epaxos.CommandR\x07command\x12\x10\
-    \n\x03seq\x18\x05\x20\x01(\rR\x03seq\x12$\n\x04deps\x18\x06\x20\x03(\x0b\
-    2\x10.epaxos.InstanceR\x04deps\x127\n\x0ecommitted_deps\x18\x07\x20\x03(\
-    \x0b2\x10.epaxos.InstanceR\rcommittedDeps\"B\n\x12PreAcceptOKPayload\x12\
-    ,\n\x08instance\x18\x01\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\"\
-    \xc0\x01\n\rAcceptPayload\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08le\
-    aderId\x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08\
-    instance\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\x12\x14\n\x05\
-    count\x18\x04\x20\x01(\rR\x05count\x12\x10\n\x03seq\x18\x05\x20\x01(\rR\
-    \x03seq\x12$\n\x04deps\x18\x06\x20\x03(\x0b2\x10.epaxos.InstanceR\x04dep\
-    s\"j\n\x12AcceptReplyPayload\x12,\n\x08instance\x18\x01\x20\x01(\x0b2\
-    \x10.epaxos.InstanceR\x08instance\x12\x0e\n\x02ok\x18\x02\x20\x01(\rR\
-    \x02ok\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\"\xbd\x01\n\rCo\
-    mmitPayload\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08leaderId\x12,\n\
-    \x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12)\
-    \n\x07command\x18\x03\x20\x03(\x0b2\x0f.epaxos.CommandR\x07command\x12\
-    \x10\n\x03seq\x18\x04\x20\x01(\rR\x03seq\x12$\n\x04deps\x18\x05\x20\x03(\
-    \x0b2\x10.epaxos.InstanceR\x04deps\"\xad\x01\n\x12CommitShortPayload\x12\
-    \x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08leaderId\x12,\n\x08instance\x18\
-    \x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\x14\n\x05count\
-    \x18\x03\x20\x01(\rR\x05count\x12\x10\n\x03seq\x18\x04\x20\x01(\rR\x03se\
-    q\x12$\n\x04deps\x18\x05\x20\x03(\x0b2\x10.epaxos.InstanceR\x04deps\"s\n\
-    \x0ePreparePayload\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08leaderId\
-    \x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instan\
-    ce\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\"\x97\x02\n\x13Prep\
-    areReplyPayload\x12\x1b\n\taccept_id\x18\x01\x20\x01(\rR\x08acceptId\x12\
-    \x0e\n\x02ok\x18\x02\x20\x01(\rR\x02ok\x12,\n\x08instance\x18\x03\x20\
-    \x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\x16\n\x06ballot\x18\x04\
-    \x20\x01(\rR\x06ballot\x12*\n\x05state\x18\x05\x20\x01(\x0e2\x14.epaxos.\
-    PayloadStateR\x05state\x12)\n\x07command\x18\x06\x20\x03(\x0b2\x0f.epaxo\
-    s.CommandR\x07command\x12\x10\n\x03seq\x18\x07\x20\x01(\rR\x03seq\x12$\n\
-    \x04deps\x18\x08\x20\x03(\x0b2\x10.epaxos.InstanceR\x04deps\"\xdb\x01\n\
-    \x13TryPreAcceptPayload\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08lead\
-    erId\x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08in\
-    stance\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\x12)\n\x07comma\
-    nd\x18\x04\x20\x03(\x0b2\x0f.epaxos.CommandR\x07command\x12\x10\n\x03seq\
-    \x18\x05\x20\x01(\rR\x03seq\x12$\n\x04deps\x18\x06\x20\x03(\x0b2\x10.epa\
-    xos.InstanceR\x04deps\"\x89\x02\n\x18TryPreAcceptReplyPayload\x12\x1b\n\
-    \taccept_id\x18\x01\x20\x01(\rR\x08acceptId\x12,\n\x08instance\x18\x02\
-    \x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\x0e\n\x02ok\x18\x03\
-    \x20\x01(\rR\x02ok\x12\x16\n\x06ballot\x18\x04\x20\x01(\rR\x06ballot\x12\
-    =\n\x11conflict_instance\x18\x05\x20\x01(\x0b2\x10.epaxos.InstanceR\x10c\
-    onflictInstance\x12;\n\x0econflict_state\x18\x06\x20\x01(\x0e2\x14.epaxo\
-    s.PayloadStateR\rconflictState\"\x07\n\x05Empty*,\n\tOperation\x12\x07\n\
-    \x03PUT\x10\0\x12\r\n\tPUT_BLIND\x10\x01\x12\x07\n\x03GET\x10\x02*]\n\
-    \x0cPayloadState\x12\x0f\n\x0bPREACCEPTED\x10\0\x12\x11\n\rPREACCEPTEDEQ\
-    \x10\x01\x12\x0c\n\x08ACCEPTED\x10\x02\x12\r\n\tCOMMITTED\x10\x03\x12\
-    \x0c\n\x08EXECUTED\x10\x042\xdc\x03\n\rEpaxosService\x12G\n\npre_accept\
-    \x12\x18.epaxos.PreAcceptPayload\x1a\x1d.epaxos.PreAcceptReplyPayload\"\
-    \0\x12=\n\x06accept\x12\x15.epaxos.AcceptPayload\x1a\x1a.epaxos.AcceptRe\
-    plyPayload\"\0\x120\n\x06commit\x12\x15.epaxos.CommitPayload\x1a\r.epaxo\
-    s.Empty\"\0\x12:\n\x0bcommitshort\x12\x1a.epaxos.CommitShortPayload\x1a\
-    \r.epaxos.Empty\"\0\x12@\n\x07propose\x12\x16.epaxos.ProposePayload\x1a\
-    \x1b.epaxos.ProposeReplyPayload\"\0\x12@\n\x07prepare\x12\x16.epaxos.Pre\
-    parePayload\x1a\x1b.epaxos.PrepareReplyPayload\"\0\x12Q\n\x0etry_pre_acc\
-    ept\x12\x1b.epaxos.TryPreAcceptPayload\x1a\x20.epaxos.TryPreAcceptReplyP\
-    ayload\"\0b\x06proto3\
+    R\x03seq\x12\x12\n\x04deps\x18\x06\x20\x03(\rR\x04deps\"\xe5\x01\n\x15Pr\
+    eAcceptReplyPayload\x12,\n\x08instance\x18\x01\x20\x01(\x0b2\x10.epaxos.\
+    InstanceR\x08instance\x12\x0e\n\x02ok\x18\x02\x20\x01(\rR\x02ok\x12\x16\
+    \n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\x12)\n\x07command\x18\x04\x20\
+    \x03(\x0b2\x0f.epaxos.CommandR\x07command\x12\x10\n\x03seq\x18\x05\x20\
+    \x01(\rR\x03seq\x12\x12\n\x04deps\x18\x06\x20\x03(\rR\x04deps\x12%\n\x0e\
+    committed_deps\x18\x07\x20\x03(\rR\rcommittedDeps\"B\n\x12PreAcceptOKPay\
+    load\x12,\n\x08instance\x18\x01\x20\x01(\x0b2\x10.epaxos.InstanceR\x08in\
+    stance\"\xae\x01\n\rAcceptPayload\x12\x1b\n\tleader_id\x18\x01\x20\x01(\
+    \rR\x08leaderId\x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.Inst\
+    anceR\x08instance\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\x12\
+    \x14\n\x05count\x18\x04\x20\x01(\rR\x05count\x12\x10\n\x03seq\x18\x05\
+    \x20\x01(\rR\x03seq\x12\x12\n\x04deps\x18\x06\x20\x03(\rR\x04deps\"j\n\
+    \x12AcceptReplyPayload\x12,\n\x08instance\x18\x01\x20\x01(\x0b2\x10.epax\
+    os.InstanceR\x08instance\x12\x0e\n\x02ok\x18\x02\x20\x01(\rR\x02ok\x12\
+    \x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\"\xab\x01\n\rCommitPayloa\
+    d\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08leaderId\x12,\n\x08instanc\
+    e\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12)\n\x07comma\
+    nd\x18\x03\x20\x03(\x0b2\x0f.epaxos.CommandR\x07command\x12\x10\n\x03seq\
+    \x18\x04\x20\x01(\rR\x03seq\x12\x12\n\x04deps\x18\x05\x20\x03(\rR\x04dep\
+    s\"\x9b\x01\n\x12CommitShortPayload\x12\x1b\n\tleader_id\x18\x01\x20\x01\
+    (\rR\x08leaderId\x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.Ins\
+    tanceR\x08instance\x12\x14\n\x05count\x18\x03\x20\x01(\rR\x05count\x12\
+    \x10\n\x03seq\x18\x04\x20\x01(\rR\x03seq\x12\x12\n\x04deps\x18\x05\x20\
+    \x03(\rR\x04deps\"s\n\x0ePreparePayload\x12\x1b\n\tleader_id\x18\x01\x20\
+    \x01(\rR\x08leaderId\x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos\
+    .InstanceR\x08instance\x12\x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\
+    \"\xfe\x01\n\x13PrepareReplyPayload\x12\x1b\n\taccept_id\x18\x01\x20\x01\
+    (\rR\x08acceptId\x12\x0e\n\x02ok\x18\x02\x20\x01(\rR\x02ok\x12,\n\x08ins\
+    tance\x18\x03\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\x16\n\
+    \x06ballot\x18\x04\x20\x01(\rR\x06ballot\x12#\n\x05state\x18\x05\x20\x01\
+    (\x0e2\r.epaxos.StateR\x05state\x12)\n\x07command\x18\x06\x20\x03(\x0b2\
+    \x0f.epaxos.CommandR\x07command\x12\x10\n\x03seq\x18\x07\x20\x01(\rR\x03\
+    seq\x12\x12\n\x04deps\x18\x08\x20\x03(\rR\x04deps\"\xc9\x01\n\x13TryPreA\
+    cceptPayload\x12\x1b\n\tleader_id\x18\x01\x20\x01(\rR\x08leaderId\x12,\n\
+    \x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.InstanceR\x08instance\x12\
+    \x16\n\x06ballot\x18\x03\x20\x01(\rR\x06ballot\x12)\n\x07command\x18\x04\
+    \x20\x03(\x0b2\x0f.epaxos.CommandR\x07command\x12\x10\n\x03seq\x18\x05\
+    \x20\x01(\rR\x03seq\x12\x12\n\x04deps\x18\x06\x20\x03(\rR\x04deps\"\x82\
+    \x02\n\x18TryPreAcceptReplyPayload\x12\x1b\n\taccept_id\x18\x01\x20\x01(\
+    \rR\x08acceptId\x12,\n\x08instance\x18\x02\x20\x01(\x0b2\x10.epaxos.Inst\
+    anceR\x08instance\x12\x0e\n\x02ok\x18\x03\x20\x01(\rR\x02ok\x12\x16\n\
+    \x06ballot\x18\x04\x20\x01(\rR\x06ballot\x12=\n\x11conflict_instance\x18\
+    \x05\x20\x01(\x0b2\x10.epaxos.InstanceR\x10conflictInstance\x124\n\x0eco\
+    nflict_state\x18\x06\x20\x01(\x0e2\r.epaxos.StateR\rconflictState\"\x07\
+    \n\x05Empty*,\n\tOperation\x12\x07\n\x03PUT\x10\0\x12\r\n\tPUT_BLIND\x10\
+    \x01\x12\x07\n\x03GET\x10\x02*V\n\x05State\x12\x0f\n\x0bPREACCEPTED\x10\
+    \0\x12\x11\n\rPREACCEPTEDEQ\x10\x01\x12\x0c\n\x08ACCEPTED\x10\x02\x12\r\
+    \n\tCOMMITTED\x10\x03\x12\x0c\n\x08EXECUTED\x10\x042\xce\x03\n\rEpaxosSe\
+    rvice\x12G\n\npre_accept\x12\x18.epaxos.PreAcceptPayload\x1a\x1d.epaxos.\
+    PreAcceptReplyPayload\"\0\x12=\n\x06accept\x12\x15.epaxos.AcceptPayload\
+    \x1a\x1a.epaxos.AcceptReplyPayload\"\0\x120\n\x06commit\x12\x15.epaxos.C\
+    ommitPayload\x1a\r.epaxos.Empty\"\0\x12:\n\x0bcommitshort\x12\x1a.epaxos\
+    .CommitShortPayload\x1a\r.epaxos.Empty\"\0\x122\n\x07propose\x12\x16.epa\
+    xos.ProposePayload\x1a\r.epaxos.Empty\"\0\x12@\n\x07prepare\x12\x16.epax\
+    os.PreparePayload\x1a\x1b.epaxos.PrepareReplyPayload\"\0\x12Q\n\x0etry_p\
+    re_accept\x12\x1b.epaxos.TryPreAcceptPayload\x1a\x20.epaxos.TryPreAccept\
+    ReplyPayload\"\0b\x06proto3\
 ";
 
 static file_descriptor_proto_lazy: ::protobuf::rt::LazyV2<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::rt::LazyV2::INIT;

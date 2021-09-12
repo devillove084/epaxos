@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -6,27 +7,30 @@ use std::fs::File;
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy, PartialOrd, Ord)]
 pub struct ReplicaId(pub u32);
 
-#[derive(Default, Clone)]
-pub struct PayloadState {
-    pub state_num: i32,
+// #[derive(Clone)]
+// pub struct PayloadState {
+//     pub state: State,
+// }
+
+#[derive(Clone, PartialEq, Eq, Copy)]
+pub enum Operation {
+    Put,
+    PutBlind,
+    Get,
 }
 
-#[derive(Default, Clone)]
-pub struct Operation {
-    pub op: i32,
-}
-
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Command {
     pub op: Operation,
     pub key: String,
     pub value: i32,
 }
 
-#[derive(Clone)]
+
+#[derive(Default, Clone)]
 pub struct ProposePayload {
     pub command_id: u32,
-    pub command: Command,
+    pub command: Vec<Command>,
     pub timestamp: u64,
 }
 
@@ -37,9 +41,10 @@ pub struct ProposeReplyPayload {
     pub timestamp: u64,
 }
 
-#[derive(Clone, PartialEq, Eq, Copy)]
+#[derive(Clone, PartialEq, Eq, Copy, PartialOrd, Ord)]
 pub enum State {
     PreAccepted,
+    PreAcceptedEq,
     Accepted,
     Committed,
     Executed,
@@ -55,16 +60,16 @@ impl State {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct InstanceEntry {
     pub ballot: u32,
     //pub write_req: WriteRequest,
-    pub command: Vec<Command>,
+    pub command: Option<Vec<Command>>,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
     pub instance: Instance,
-    pub state: PayloadState,
-    pub from_leader: Option<CommandLeaderBookKeeping>,
+    pub state: Option<State>,
+    pub from_leader: Option<RefCell<CommandLeaderBookKeeping>>,
 }
 
 pub struct PreparePayload {
@@ -73,16 +78,15 @@ pub struct PreparePayload {
     pub instance: Instance,
 }
 
-#[derive(Default)]
 pub struct PrepareReplyPayload {
     pub accept_id: u32,
     pub ok: u32,
     pub instance: Instance,
     pub ballot: u32,
-    pub state: PayloadState,
+    pub state: State,
     pub command: Vec<Command>,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
 }
 
 pub struct PreAcceptPayload {
@@ -91,7 +95,7 @@ pub struct PreAcceptPayload {
     pub ballot: u32,
     pub command: Vec<Command>,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
 }
 
 pub struct PreAcceptReplyPayload {
@@ -100,8 +104,8 @@ pub struct PreAcceptReplyPayload {
     pub ballot: u32,
     pub command: Vec<Command>,
     pub seq: u32,
-    pub deps: Vec<Instance>,
-    pub commited_deps: Vec<Instance>,
+    pub deps: Vec<u32>,
+    pub commited_deps: Vec<u32>,
 }
 
 pub struct PreAcceptOKPayload {
@@ -114,7 +118,7 @@ pub struct AcceptPayload {
     pub ballot: u32,
     pub count: u32,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
 }
 
 pub struct AcceptReplyPayload {
@@ -128,7 +132,7 @@ pub struct CommitPayload {
     pub instance: Instance,
     pub command: Vec<Command>,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
 }
 
 pub struct CommitShortPayload {
@@ -136,7 +140,7 @@ pub struct CommitShortPayload {
     pub instance: Instance,
     pub count: u32,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
 }
 
 pub struct TryPreAcceptPayload {
@@ -145,7 +149,7 @@ pub struct TryPreAcceptPayload {
     pub ballot: u32,
     pub command: Vec<Command>,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
 }
 
 pub struct TryPreAcceptReplyPayload {
@@ -172,7 +176,7 @@ pub struct LogEntry {
     pub key: String,
     pub value: i32,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
     pub state: State,
     pub ballot: u32,
 }
@@ -192,37 +196,38 @@ pub struct Instance {
 //     pub ballot: u32,
 //     pub replica: u32,
 // }
+pub struct Propose(pub ProposePayload);
 
 pub struct PreAccept(pub PreAcceptPayload);
 
 pub struct Prepare(pub PreparePayload);
 
-pub struct Accept(pub Payload);
+pub struct Accept(pub AcceptPayload);
 
-pub struct Commit(pub Payload);
+pub struct Commit(pub CommitPayload);
 
-pub struct PreAcceptOK(pub Payload);
+pub struct CommitShort(pub CommitShortPayload);
 
-pub struct AcceptOK(pub AcceptOKPayload);
+//pub struct AcceptOK(pub AcceptOKPayload);
 
 pub struct TryPreAccept(pub TryPreAcceptPayload);
 
-pub enum Path {
-    Slow(Payload),
-    Fast(Payload),
-}
+// pub enum Path {
+//     Slow(Payload),
+//     Fast(Payload),
+// }
 
 #[derive(Default, Clone)]
 pub struct CommandLeaderBookKeeping {
-    pub client_proposals: Vec<ProposePayload>,
+    pub client_proposals: Option<ProposePayload>,
     pub max_recv_ballot: u32,
     pub prepare_oks: u32,
     pub all_equal: bool,
     pub pre_accept_oks: u32,
     pub accept_oks: u32,
     pub nacks: u32,
-    pub original_deps: Vec<Instance>,
-    pub commited_deps: Vec<Instance>,
+    pub original_deps: Vec<u32>,
+    pub commited_deps: Vec<u32>,
     pub recovery_insts: Option<RecoveryPayloadEntry>,
     pub preparing: bool,
     pub trying_to_pre_accept: bool,
@@ -231,13 +236,13 @@ pub struct CommandLeaderBookKeeping {
     pub commit_time: u64,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct RecoveryPayloadEntry {
     //pub write_req: WriteRequest,
     pub command: Vec<Command>,
-    pub state: PayloadState,
+    pub state: State,
     pub seq: u32,
-    pub deps: Vec<Instance>,
+    pub deps: Vec<u32>,
     pub pre_accept_count: u32,
     pub command_leader_response: bool,
 }
@@ -275,7 +280,7 @@ pub struct CoreInfo {
     pub durable: bool,
     pub stable_store: Option<File>,
 
-    pub preferred_peer_order: Vec<ReplicaId>,
+    pub preferred_peer_order: Vec<u32>,
     pub ewma: Vec<f64>,
     pub on_client_connect: bool,
 }

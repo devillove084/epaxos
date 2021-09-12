@@ -4,7 +4,7 @@ use petgraph::{
     graph::{node_index as n, NodeIndex},
     Graph,
 };
-use sharedlib::{execute::Executor, commit::Instance};
+use sharedlib::{execute::Executor, epaxos_info::Instance};
 
 struct Edge {
     from: Instance,

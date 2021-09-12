@@ -10,7 +10,8 @@ service EpaxosService {
   rpc commitshort(CommitShortPayload) returns (Empty) {};
   // rpc write(WriteRequest) returns (WriteResponse) {};
   // rpc read(ReadRequest) returns (ReadResponse) {};
-  rpc propose(ProposePayload) returns (ProposeReplyPayload) {};
+  //rpc propose(ProposePayload) returns (ProposeReplyPayload) {};
+  rpc propose(ProposePayload) returns (Empty) {};
   rpc prepare(PreparePayload) returns (PrepareReplyPayload) {};
   rpc try_pre_accept(TryPreAcceptPayload) returns (TryPreAcceptReplyPayload) {};
 }
@@ -33,7 +34,7 @@ message Command {
 
 message ProposePayload {
   uint32 command_id = 1;
-  Command command = 2;
+  repeated Command command = 2;
   uint64 timestamp = 3;
 }
 
@@ -49,7 +50,7 @@ message Instance {
   uint32 slot = 2;
 }
 
-enum PayloadState {
+enum State {
   PREACCEPTED = 0;
   PREACCEPTEDEQ = 1;
   ACCEPTED = 2;
@@ -103,7 +104,7 @@ message PreAcceptPayload {
   uint32 ballot = 3;
   repeated Command command = 4;
   uint32 seq = 5;
-  repeated Instance deps = 6;
+  repeated uint32 deps = 6;
 }
 
 message PreAcceptReplyPayload {
@@ -112,8 +113,8 @@ message PreAcceptReplyPayload {
   uint32 ballot = 3;
   repeated Command command = 4;
   uint32 seq = 5;
-  repeated Instance deps = 6;
-  repeated Instance committed_deps = 7;
+  repeated uint32 deps = 6;
+  repeated uint32 committed_deps = 7;
 }
 
 message PreAcceptOKPayload {
@@ -126,7 +127,7 @@ message AcceptPayload {
   uint32 ballot = 3;
   uint32 count = 4;
   uint32 seq = 5;
-  repeated Instance deps = 6;
+  repeated uint32 deps = 6;
 }
 
 message AcceptReplyPayload {
@@ -140,7 +141,7 @@ message CommitPayload {
   Instance instance = 2;
   repeated Command command = 3;
   uint32 seq = 4;
-  repeated Instance deps = 5;
+  repeated uint32 deps = 5;
 }
 
 message CommitShortPayload {
@@ -148,7 +149,7 @@ message CommitShortPayload {
   Instance instance = 2;
   uint32 count = 3;
   uint32 seq = 4;
-  repeated Instance deps = 5;
+  repeated uint32 deps = 5;
 }
 
 message PreparePayload {
@@ -162,10 +163,10 @@ message PrepareReplyPayload {
   uint32 ok = 2;
   Instance instance = 3;
   uint32 ballot = 4;
-  PayloadState state = 5;
+  State state = 5;
   repeated Command command = 6;
   uint32 seq = 7;
-  repeated Instance deps = 8;
+  repeated uint32 deps = 8;
 }
 
 message TryPreAcceptPayload {
@@ -174,7 +175,7 @@ message TryPreAcceptPayload {
   uint32 ballot = 3;
   repeated Command command = 4;
   uint32 seq = 5;
-  repeated Instance deps = 6;
+  repeated uint32 deps = 6;
 }
 
 message TryPreAcceptReplyPayload {
@@ -183,7 +184,7 @@ message TryPreAcceptReplyPayload {
   uint32 ok = 3;
   uint32 ballot = 4;
   Instance conflict_instance = 5;
-  PayloadState conflict_state = 6;
+  State conflict_state = 6;
 }
 
 message Empty {}

@@ -1,7 +1,7 @@
 #![feature(derive_default_enum)]
 #![feature(destructuring_assignment)]
 
-pub mod commit;
+pub mod epaxos_info;
 pub mod config;
 pub mod converter;
 pub mod epaxos;

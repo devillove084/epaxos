@@ -3,7 +3,7 @@
 pub const SLOW_QUORUM: usize = 3; // F + 1
 pub const FAST_QUORUM: usize = 3; // F + floor(F + 1 / 2)
 pub const REPLICAS_NUM: usize = 5;
-pub const MAXBATCH: u32 = 10000;
+pub const MAXBATCH: usize = 10000;
 pub const CLOCK_SYNC_NONE: u32 = 0;
 pub const LOCALHOST: &str = "127.0.0.1";
 

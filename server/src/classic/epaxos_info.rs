@@ -459,8 +459,40 @@ impl EpaxosLogic {
         info!("Committed. My log is {:#?}", self.cmds);
     }
 
-    fn update_attributes(&self, cmds: Vec<Command>, seq: u32, deps: Vec<Instance>, instance: &Instance) -> (u32, Vec<Instance>, bool) {
+    pub fn find_pre_accept_conflicts(&self, cmds: Vec<Command>, instance: Instance, seq: u32, deps: Vec<u32>) -> (bool, u32, u32) {
 
+    }
+
+    pub fn clear_hashtables(&self) {
+
+    }
+
+    pub fn update_attributes(&self, cmds: Vec<Command>, seq: u32, deps: Vec<u32>, instance: &Instance) -> (u32, Vec<u32>, bool) {
+
+    }
+
+    pub fn update_conflicts(&self, cmds: Vec<Command>, instance: &Instance, seq: u32) {
+
+    }
+
+    pub fn record_payload_metadata(&self, instance: &InstanceEntry) {
+
+    }
+
+    pub fn record_commands(&self, cmds: Vec<Command>) {
+
+    }
+
+    pub fn update_committed(&self, instance: &Instance) {
+        
+    }
+
+    pub fn sync(&self) {
+
+    }
+
+    pub fn is_initial_ballot(&self, ballot: u32) -> bool {
+        true
     }
 
     fn find_interference(&self, key: &String) -> Vec<Instance> {
@@ -551,6 +583,10 @@ impl EpaxosLogic {
     pub fn make_ballot_larger_than(&self, ballot: u32) -> u32 {
         return self.make_unique_ballot((ballot >> 4) + 1);
     }
+}
+
+pub fn equal(a: Vec<u32>, b: Vec<u32>) -> bool {
+    true
 }
 
 impl fmt::Debug for LogEntry {

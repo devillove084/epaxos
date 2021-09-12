@@ -1,6 +1,6 @@
 use grpcio::Environment;
 use log::info;
-use sharedlib::{commit::ReplicaId, epaxos_grpc::create_epaxos_service, server::EpaxosServerImpl};
+use sharedlib::{epaxos_info::ReplicaId, epaxos_grpc::create_epaxos_service, server::EpaxosServerImpl};
 use std::{env, sync::Arc, thread};
 
 fn main() {

@@ -68,20 +68,20 @@ impl ExecutorInner {
 impl Executor {
     pub fn build_graph(
         &mut self,
-        instance: &Instance,
+        instance: u32,
         gr_map: &mut Vec<(usize, usize)>,
         seq_slot: &mut BTreeMap<usize, (Instance, usize)>,
     ) {
-        match self.cmds.get(&(instance.slot as usize)) {
+        match self.cmds.get(&(instance as usize)) {
             Some(l) => {
                 let log_entry = l.clone();
                 if log_entry.deps.is_empty() || l.state == State::Executed {
                     return;
                 }
                 for to_inst in log_entry.deps.iter() {
-                    gr_map.push((instance.slot as usize, to_inst.slot as usize));
-                    seq_slot.insert(instance.slot as usize, (*instance, log_entry.seq as usize));
-                    self.build_graph(to_inst, gr_map, seq_slot);
+                    gr_map.push((instance as usize, *to_inst as usize));
+                    seq_slot.insert(instance as usize, (instance, log_entry.seq as usize));
+                    self.build_graph(*to_inst, gr_map, seq_slot);
                 }
             }
             None => return,
@@ -92,40 +92,11 @@ impl Executor {
         let local_scc = self.inner.clone();
         let comps = local_scc.strong_connect(&self.graph);
         for comp in comps {
-            // smol::block_on(async {
-            //     //TODO:
-
-            // });
             self.execute_scc(&mut comp.clone());
         }
     }
 
     pub fn execute_scc(&mut self, comp: &mut Vec<NodeIndex>) {
-        // for v in comp.iter() {
-        //     // The dependency should either be in this strongly connected
-        //     // component or have already been executed (possibly by an earlier
-        //     // SCC). If those conditions are not true, abort executing the
-        //     // entire SCC.
-        //     let deps = self.vertices.get(&v.index());
-        //     match deps {
-        //         Some(dep) => {
-        //             for d in dep {
-        //                 if comp.contains(&n(*d)) {
-        //                     continue;
-        //                 }
-
-        //                 // The dependency is not in this SCC and
-        //                 // has not been executed in a prerequisite SCC.
-        //                 // We cannot execute at this time.
-        //                 if self.has_executed(dep) {
-        //                     return;
-        //                 }
-        //             }
-        //         }
-        //         None => unreachable!(),
-        //     }
-        // }
-        // Sort the component based on SCC execution order.
         comp.sort_by(|a: &NodeIndex, b: &NodeIndex| -> Ordering {
             let seq1 = self.seq_slot.get(&a.index()).unwrap();
             let seq2 = self.seq_slot.get(&b.index()).unwrap();
