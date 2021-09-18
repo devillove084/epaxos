@@ -107,6 +107,15 @@ message PreAcceptPayload {
   repeated uint32 deps = 6;
 }
 
+// enum PAReply {
+//   PREACCEPTREPLYPAYLOAD = 0;
+//   PREACCEPTOKPAYLOAD = 1;
+// }
+
+// message PreAcceptReply {
+//   PAReply reply = 1;
+// }
+
 message PreAcceptReplyPayload {
   Instance instance = 1;
   uint32 ok = 2;

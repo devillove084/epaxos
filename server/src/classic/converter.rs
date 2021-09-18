@@ -135,7 +135,7 @@ impl PrepareReplyPayload {
             ok: prepare_reply_payload.get_ok(),
             instance: Instance::from_grpc(prepare_reply_payload.get_instance()),
             ballot: prepare_reply_payload.get_ballot(),
-            state: State::from_grpc(&prepare_reply_payload.get_state()),
+            state: Some(State::from_grpc(&prepare_reply_payload.get_state())),
             command: prepare_reply_payload.get_command().iter().map(Command::from_grpc).collect(),
             seq:prepare_reply_payload.get_seq(),
             deps: prepare_reply_payload.get_deps().to_vec(),
@@ -148,7 +148,7 @@ impl PrepareReplyPayload {
         prepare_reply_paylaod.set_ok(self.ok);
         prepare_reply_paylaod.set_instance(Instance::to_grpc(&self.instance));
         prepare_reply_paylaod.set_ballot(self.ballot);
-        prepare_reply_paylaod.set_state(State::to_grpc(&self.state));
+        prepare_reply_paylaod.set_state(State::to_grpc(&self.state.unwrap()));
         prepare_reply_paylaod.set_command(protobuf::RepeatedField::from_vec(
             self.command.iter().map(|c| c.to_grpc()).collect(),
         ));
@@ -183,6 +183,28 @@ impl PreAcceptPayload {
         preaccept_payload
     }
 }
+
+// impl PreAcceptReply {
+//     pub fn from_grpc(pareply: &grpc::PreAcceptReply) -> Self {
+//         match pareply.reply {
+//             grpc::PAReply::PREACCEPTREPLYPAYLOAD => PreAcceptReply::PreAcceptReply,
+//             grpc::PAReply::PREACCEPTOKPAYLOAD => PreAcceptReply::PreAcceptOK,
+//         }
+//     }
+
+//     pub fn to_grpc(&self) -> grpc::PreAcceptReply {
+//         let mut pareply = grpc::PreAcceptReply::new();
+//         match self {
+//             PreAcceptReply::PreAcceptOK => {
+//                 pareply.set_reply(grpc::PAReply::PREACCEPTOKPAYLOAD);
+//             },
+//             PreAcceptReply::PreAcceptReply => {
+//                 pareply.set_reply(grpc::PAReply::PREACCEPTREPLYPAYLOAD);
+//             },
+//         }
+//         pareply
+//     }
+// }
 
 impl PreAcceptReplyPayload {
     pub fn from_grpc(preaccept_reply_payload: &grpc::PreAcceptReplyPayload) -> Self {

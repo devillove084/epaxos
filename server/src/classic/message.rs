@@ -69,7 +69,8 @@ pub struct InstanceEntry {
     pub deps: Vec<u32>,
     pub instance: Instance,
     pub state: Option<State>,
-    pub from_leader: Option<RefCell<CommandLeaderBookKeeping>>,
+    //pub from_leader: Option<RefCell<CommandLeaderBookKeeping>>,
+    pub from_leader: Option<CommandLeaderBookKeeping>,
 }
 
 pub struct PreparePayload {
@@ -83,7 +84,7 @@ pub struct PrepareReplyPayload {
     pub ok: u32,
     pub instance: Instance,
     pub ballot: u32,
-    pub state: State,
+    pub state: Option<State>,
     pub command: Vec<Command>,
     pub seq: u32,
     pub deps: Vec<u32>,
@@ -97,6 +98,11 @@ pub struct PreAcceptPayload {
     pub seq: u32,
     pub deps: Vec<u32>,
 }
+
+// pub enum PreAcceptReply {
+//     PreAcceptOK,
+//     PreAcceptReply,
+// }
 
 pub struct PreAcceptReplyPayload {
     pub instance: Instance,

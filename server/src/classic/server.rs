@@ -2,25 +2,19 @@
 #![allow(incomplete_features)]
 
 use std::borrow::BorrowMut;
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::ops::{AddAssign, Index, MulAssign};
-use std::sync::atomic::AtomicU32;
-
-use futures::TryFutureExt;
-use smol::channel::{Sender,Receiver};
+use std::ops::{Add, AddAssign, MulAssign};
 
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use crate::config::{CHECKPOINT_PERIOD, DO_CHECKPOINTING, MAXBATCH};
 use crate::epaxos_info::{equal, EpaxosLogic};
 
-use super::config::{REPLICAS_NUM, REPLICA_TEST, SLOW_QUORUM};
-use super::epaxos::{self as grpc_service, Empty};
+use super::config::{REPLICAS_NUM, REPLICA_TEST};
+use super::epaxos::Empty;
 use super::epaxos_grpc::{EpaxosService, EpaxosServiceClient};
 use super::message::*;
-use grpcio::{ChannelBuilder, ClientUnaryReceiver, Environment, UnarySink};
+use grpcio::{ChannelBuilder, Environment, UnarySink};
 use log::{error, info};
 
 lazy_static! {
@@ -30,6 +24,10 @@ lazy_static! {
     // Default queue buffer is vec
     // TODO: maybe better?
     pub static ref QUEUE_BUFFER: Mutex<VecDeque<ProposePayload>> = Mutex::new(VecDeque::new());
+    pub static ref CONFLICT: Mutex<u32> = Mutex::new(0);
+    pub static ref HAPPY: Mutex<u32> = Mutex::new(0);
+    pub static ref SLOW: Mutex<u32> = Mutex::new(0);
+    pub static ref WEIRD: Mutex<u32> = Mutex::new(0);
 
     //pub static ref PREACCEPT_RESULT_CHANNEL: (Receiver<ClientUnaryReceiver<PreAcceptReplyPayload>>, Sender<ClientUnaryReceiver<PreAcceptReplyPayload>>) = smol::channel::unbounded();
     // pub static ref PREPARE_RESULT_CHANNEL: (Receiver<ClientUnaryReceiver<PrepareReplyPayload>>, Sender<ClientUnaryReceiver<PrepareReplyPayload>>) = channel();
@@ -170,7 +168,7 @@ impl EpaxosServerInner {
                     deps,
                     instance: *instance,
                     state: Some(State::PreAccepted),
-                    from_leader: Some(RefCell::new(CommandLeaderBookKeeping {
+                    from_leader: Some(CommandLeaderBookKeeping {
                         max_recv_ballot: 0,
                         prepare_oks: 0,
                         all_equal: true,
@@ -186,7 +184,7 @@ impl EpaxosServerInner {
                         tpa_oks: 0,
                         commit_time: 0,
                         client_proposals: None,
-                    })),
+                    }),
                 },
             );
 
@@ -353,6 +351,7 @@ impl EpaxosServerInner {
                 continue;
             }
 
+            // TODO: tryzip
             let task = smol::spawn(async {
                 let payload = self
                 .replicas
@@ -611,7 +610,8 @@ impl EpaxosServerInner {
             .get(&preply.instance)
             .unwrap();
 
-        if inst.from_leader.is_none() || !inst.from_leader.unwrap().borrow().preparing {
+        let preparing = inst.from_leader.map(|mut s| {s.preparing});
+        if inst.from_leader.is_none() || !preparing.unwrap(){
             // TODO: fix return
             // we've moved on -- these are delayed replies, so just ignore
             // TODO: should replies for non-current ballots be ignored?
@@ -620,12 +620,14 @@ impl EpaxosServerInner {
 
         if preply.ok == 0 {
             // TODO: there is probably another active leader, back off and retry later
-            inst.from_leader.as_ref().unwrap().borrow_mut().nacks += 1;
+            //inst.from_leader.as_ref().unwrap().borrow_mut().nacks += 1;
+            inst.from_leader.map(|mut s| {s.nacks += 1});
         }
 
         //Got an ACK (preply.OK == TRUE)
 
-        inst.from_leader.as_ref().unwrap().borrow_mut().prepare_oks += 1;
+        //inst.from_leader.as_ref().unwrap().borrow_mut().prepare_oks += 1;
+        inst.from_leader.map(|mut s| {s.prepare_oks += 1});
 
         if inst.state.unwrap() == State::Committed || inst.state.unwrap() == State::Executed {
             epaxos_logic.instance_entry_space.insert(
@@ -648,73 +650,103 @@ impl EpaxosServerInner {
             return;
         }
 
-        if preply.state == State::Accepted {
-            if inst.from_leader.unwrap().borrow().recovery_insts.is_none()
-                || inst.from_leader.unwrap().borrow().max_recv_ballot < preply.ballot
+        let ri = inst.from_leader.map(|s| {s.recovery_insts}).unwrap();
+        let mrb = inst.from_leader.map(|s| {s.max_recv_ballot});
+        if preply.state == Some(State::Accepted) {
+            if ri.is_none() || mrb.unwrap() < preply.ballot
             {
-                inst.from_leader.unwrap().borrow_mut().recovery_insts = Some(RecoveryPayloadEntry {
-                    command: preply.command,
-                    state: preply.state,
-                    seq: preply.seq,
-                    deps: preply.deps,
-                    pre_accept_count: 0,
-                    command_leader_response: false,
+                inst.from_leader.map(|mut s| {
+                    s.recovery_insts.map(|mut re| {
+                        re.command = preply.command;
+                        re.state = preply.state.unwrap();
+                        re.seq = preply.seq;
+                        re.deps = preply.deps;
+                        re.pre_accept_count = 0;
+                        re.command_leader_response = false;
+                    });
+                    s.max_recv_ballot = preply.ballot;
                 });
-                inst.from_leader.unwrap().borrow_mut().max_recv_ballot = preply.ballot;
+                // inst.from_leader.unwrap().borrow_mut().recovery_insts = Some(RecoveryPayloadEntry {
+                //     command: preply.command,
+                //     state: preply.state,
+                //     seq: preply.seq,
+                //     deps: preply.deps,
+                //     pre_accept_count: 0,
+                //     command_leader_response: false,
+                // });
+                // inst.from_leader.unwrap().borrow_mut().max_recv_ballot = preply.ballot;
             }
         }
 
-        if (preply.state == State::PreAccepted && preply.state == State::PreAcceptedEq)
-            && (inst.from_leader.unwrap().borrow().recovery_insts.is_none()
-                || inst.from_leader.unwrap().borrow().recovery_insts.unwrap().state < State::Accepted)
+        let ri = inst.from_leader.map(|s| s.recovery_insts).unwrap();
+        if (preply.state == Some(State::PreAccepted) && preply.state == Some(State::PreAcceptedEq))
+            && (ri.is_none() || ri.unwrap().state < State::Accepted)
         {
-            if inst.from_leader.unwrap().borrow().recovery_insts.is_none() {
-                inst.from_leader.unwrap().borrow_mut().recovery_insts = Some(RecoveryPayloadEntry {
-                    command: preply.command,
-                    state: preply.state,
-                    seq: preply.seq,
-                    deps: preply.deps,
-                    pre_accept_count: 1,
-                    command_leader_response: false,
+            if ri.is_none() {
+                // inst.from_leader.unwrap().borrow_mut().recovery_insts = Some(RecoveryPayloadEntry {
+                //     command: preply.command,
+                //     state: preply.state,
+                //     seq: preply.seq,
+                //     deps: preply.deps,
+                //     pre_accept_count: 1,
+                //     command_leader_response: false,
+                // });
+                ri.map(|mut s| {
+                    s.command = preply.command;
                 });
             } else if preply.seq == inst.seq && equal(preply.deps, inst.deps) {
-                inst.from_leader
-                    .unwrap()
-                    .borrow_mut()
-                    .recovery_insts
-                    .unwrap()
-                    .pre_accept_count += 1;
-            } else if preply.state == State::PreAccepted {
+                // inst.from_leader
+                //     .unwrap()
+                //     .borrow_mut()
+                //     .recovery_insts
+                //     .unwrap()
+                //     .pre_accept_count += 1;
+                ri.map(|mut s| {
+                    s.pre_accept_count += 1;
+                });
+            } else if preply.state == Some(State::PreAccepted) {
                 // If we get different ordering attributes from pre-acceptors, we must go with the ones
                 // that agreed with the initial command leader (in case we do not use Thrifty).
                 // This is safe if we use thrifty, although we can also safely start phase 1 in that case.
-                inst.from_leader.as_ref().unwrap().borrow_mut().recovery_insts = Some(RecoveryPayloadEntry {
-                    command: preply.command.clone(),
-                    state: preply.state,
-                    seq: preply.seq,
-                    deps: preply.deps.clone(),
-                    pre_accept_count: 1,
-                    command_leader_response: false,
+                // inst.from_leader.as_ref().unwrap().borrow_mut().recovery_insts = Some(RecoveryPayloadEntry {
+                //     command: preply.command.clone(),
+                //     state: preply.state,
+                //     seq: preply.seq,
+                //     deps: preply.deps.clone(),
+                //     pre_accept_count: 1,
+                //     command_leader_response: false,
+                // });
+                ri.map(|mut s| {
+                    s.command = preply.command;
+                    s.state = preply.state.unwrap();
+                    s.seq = preply.seq;
+                    s.deps = preply.deps;
+                    s.pre_accept_count += 1;
+                    s.command_leader_response = false;
                 });
             }
 
             if preply.accept_id == preply.instance.replica {
-                inst.from_leader
-                    .unwrap()
-                    .borrow_mut()
-                    .recovery_insts
-                    .unwrap()
-                    .command_leader_response = true;
+                // inst.from_leader
+                //     .unwrap()
+                //     .borrow_mut()
+                //     .recovery_insts
+                //     .unwrap()
+                //     .command_leader_response = true;
+                ri.map(|mut s| {
+                    s.command_leader_response = true;
+                });
             }
         }
 
-        if inst.from_leader.unwrap().borrow().prepare_oks < epaxos_logic.info.n as u32 / 2 {
+        let pok = inst.from_leader.map(|s| {s.pre_accept_oks}).unwrap();
+        if pok < epaxos_logic.info.n as u32 / 2 {
             // return or maybe record this as log
-            // TODO: fix return
             return;
         }
 
-        let mut recover_payload = inst.from_leader.unwrap().borrow().recovery_insts;
+        //let mut recover_payload = inst.from_leader.unwrap().borrow().recovery_insts;
+        let mut recover_payload = inst.from_leader.map(|s| s.recovery_insts).unwrap();
         match recover_payload {
             Some(ir) => {
                 //at least one replica has (pre-)accepted this instance
@@ -769,26 +801,31 @@ impl EpaxosServerInner {
                             self.start_phase_one(
                                 &preply.instance,
                                 inst.ballot,
-                                inst.from_leader.unwrap().borrow().client_proposals.unwrap(),
+                                inst.from_leader.map(|s| {s.client_proposals}).unwrap().unwrap(),
                                 ir.command,
                                 ir.command.len() as u32,
                             );
                             return;
                         } else {
-                            inst.from_leader.unwrap().borrow_mut().nacks = 1;
-                            inst.from_leader.unwrap().borrow_mut().possible_quorum
-                                [epaxos_logic.info.id.0 as usize] = false;
+                            inst.from_leader.map(|mut s| {s.nacks = 1});
+                            inst.from_leader.map(|mut s| {s.possible_quorum[epaxos_logic.info.id.0 as usize] = false});
+                            // inst.from_leader.unwrap().borrow_mut().nacks = 1;
+                            // inst.from_leader.unwrap().borrow_mut().possible_quorum
+                            //     [epaxos_logic.info.id.0 as usize] = false;
                         }
                     } else {
                         inst.command = Some(ir.command);
                         inst.seq = ir.seq;
                         inst.deps = ir.deps;
                         inst.state = Some(State::PreAccepted);
-                        inst.from_leader.unwrap().borrow_mut().pre_accept_oks = 1;
+                        inst.from_leader.map(|mut s| s.pre_accept_oks = 1);
+                        //inst.from_leader.unwrap().borrow_mut().pre_accept_oks = 1;
                     }
 
-                    inst.from_leader.unwrap().borrow_mut().preparing = false;
-                    inst.from_leader.unwrap().borrow_mut().trying_to_pre_accept = true;
+                    inst.from_leader.map(|mut s| {s.preparing = false});
+                    inst.from_leader.map(|mut s| {s.trying_to_pre_accept = true});
+                    // inst.from_leader.unwrap().borrow_mut().preparing = false;
+                    // inst.from_leader.unwrap().borrow_mut().trying_to_pre_accept = true;
                     // self.send_try_pre_accept(
                     //     preply.instance,
                     //     inst.ballot,
@@ -798,11 +835,12 @@ impl EpaxosServerInner {
                     // );
                     self.broadcast_try_pre_accept(&preply.instance, inst.ballot, inst.command.unwrap(), inst.seq, inst.deps);
                 } else {
-                    inst.from_leader.unwrap().borrow_mut().preparing = false;
+                    //inst.from_leader.unwrap().borrow_mut().preparing = false;
+                    inst.from_leader.map(|mut s| {s.preparing = false});
                     self.start_phase_one(
                         &preply.instance,
                         inst.ballot,
-                        inst.from_leader.unwrap().borrow().client_proposals.unwrap(),
+                        inst.from_leader.map(|s| {s.client_proposals}).unwrap().unwrap(),
                         ir.command,
                         ir.command.len() as u32,
                     );
@@ -811,7 +849,8 @@ impl EpaxosServerInner {
             None => {
                 let mut noop_deps: Vec<u32> = Vec::new();
                 noop_deps[preply.instance.replica as usize] = preply.instance.slot - 1;
-                inst.from_leader.unwrap().borrow_mut().preparing = false;
+                //inst.from_leader.unwrap().borrow_mut().preparing = false;
+                inst.from_leader.map(|mut s| {s.preparing = false});
                 epaxos_logic.instance_entry_space.insert(
                     preply.instance,
                     InstanceEntry {
@@ -832,40 +871,39 @@ impl EpaxosServerInner {
 
     fn handle_accept_reply(&self, accept_reply: &AcceptReplyPayload) {
         let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
-        let mut inst = epaxos_logic.instance_entry_space.get(&accept_reply.instance);
-
-        if inst.unwrap().state == Some(State::Accepted) {
-            // we've move on, these are delayed replies, so just ignore
-            // XXX: Produce better?
+        let mut inst = epaxos_logic.instance_entry_space.get_mut(&accept_reply.instance).unwrap();
+        if inst.state == Some(State::Accepted) {
+            // TODO: we've move on, these are delayed replies, so just ignore
             return;
         }
-
-        if inst.unwrap().ballot != accept_reply.ballot {
-            // XXX: Produce better?
+        if inst.ballot != accept_reply.ballot {
             return;
         }
-
         if accept_reply.ok == 0 {
             // TODO: there is probably another active leader
-            inst.unwrap().from_leader.unwrap().borrow_mut().nacks += 1;
+            //inst.unwrap().from_leader.unwrap().borrow_mut().nacks += 1;
+            inst.from_leader.map(|mut s| {s.nacks += 1});
 
-            if accept_reply.ballot > inst.unwrap().from_leader.unwrap().borrow().max_recv_ballot {
-                inst.unwrap().from_leader.unwrap().borrow().max_recv_ballot = accept_reply.ballot;
+            if accept_reply.ballot > inst.from_leader.map(|s| {s.max_recv_ballot}).unwrap() {
+                inst.from_leader.map(|mut s| {s.max_recv_ballot = accept_reply.ballot});
             }
 
-            if inst.unwrap().from_leader.unwrap().borrow().nacks >= (epaxos_logic.info.n / 2).try_into().unwrap() {
+            if inst.from_leader.map(|s| {s.nacks}).unwrap() >= epaxos_logic.info.n as u32 / 2 {
                 // TODO
             }
             return;
         }
 
-        inst.unwrap().from_leader.unwrap().borrow_mut().accept_oks += 1;
-
-        if inst.unwrap().from_leader.unwrap().borrow().accept_oks + 1 > (epaxos_logic.info.n / 2).try_into().unwrap() {
-            epaxos_logic.instance_entry_space.get(&accept_reply.instance).unwrap().state = Some(State::Committed);
+        inst.from_leader.map(|mut s| {s.accept_oks += 1});
+        //inst.unwrap().from_leader.unwrap().borrow_mut().accept_oks += 1;
+        let aok = inst.from_leader.map(|mut s| {s.accept_oks});
+        if aok.unwrap() + 1 > epaxos_logic.info.n as u32 / 2 {
+            //epaxos_logic.instance_entry_space.get(&accept_reply.instance).unwrap().state = Some(State::Committed);
+            epaxos_logic.instance_entry_space.get(&accept_reply.instance).map(|mut s| {s.state = Some(State::Committed)});
             epaxos_logic.update_committed(&accept_reply.instance);
             
-            if !inst.unwrap().from_leader.unwrap().borrow().client_proposals.is_none() && epaxos_logic.info.dreply {
+            let client_proposals = inst.from_leader.map(|s|{s.client_proposals}).unwrap();
+            if client_proposals.is_none() && epaxos_logic.info.dreply {
             //     // give clients the all clear
             // TODO: Redesign
 			// for i := 0; i < len(inst.lb.clientProposals); i++ {
@@ -879,25 +917,262 @@ impl EpaxosServerInner {
 			// }
             }
 
-            epaxos_logic.record_payload_metadata(inst.unwrap());
+            epaxos_logic.record_payload_metadata(inst);
             epaxos_logic.sync();
-            self.broadcast_commit(&accept_reply.instance, inst.unwrap().command.unwrap(), inst.unwrap().seq, inst.unwrap().deps);
+            self.broadcast_commit(&accept_reply.instance, inst.command.unwrap(), inst.seq, inst.deps);
         }
         
 
 
     }
 
-    fn handle_pre_accept_reply(&self, paccrepliy: &PreAcceptReplyPayload) {
-        
+    fn handle_pre_accept_reply(&self, paccreply: &PreAcceptReplyPayload) {
+        info!("Handling PreAccept reply");
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        let mut inst = epaxos_logic.instance_entry_space.get(&paccreply.instance).unwrap();
+
+        if inst.state.unwrap() == State::PreAccepted  {
+            // we've moved on, this is a delayed reply
+            return;
+        }
+
+        if inst.ballot != paccreply.ballot {
+            return;
+        }
+
+        if paccreply.ok == 0 {
+            // TODO: there is probably another active leader
+            //inst.from_leader.unwrap().borrow_mut().nacks += 1;
+            inst.from_leader.map(|mut s| s.nacks += 1);
+            if paccreply.ballot > inst.from_leader.unwrap().max_recv_ballot {
+                //inst.from_leader.unwrap().borrow_mut().max_recv_ballot = paccreply.ballot;
+                inst.from_leader.map(|mut s| {s.max_recv_ballot = paccreply.ballot});
+            }
+
+            if inst.from_leader.unwrap().nacks >= epaxos_logic.info.n as u32 / 2 {
+                // TODO
+            }
+
+            return;
+        }
+
+        //inst.from_leader.unwrap().borrow_mut().pre_accept_oks += 1;
+        inst.from_leader.map(|mut s| {s.pre_accept_oks += 1});
+
+        let mut epual = bool::default();
+        let (newseq, newdeps, equal) = epaxos_logic.merge_attributes(inst.seq, inst.deps, paccreply.seq, paccreply.deps);
+        inst.seq = newseq;
+        inst.deps = newdeps;
+
+        // XXX: 3? maybe not a specity number
+        if (epaxos_logic.info.n <= 3 && !epaxos_logic.info.thrifty) || inst.from_leader.unwrap().pre_accept_oks > 1 {
+            //inst.from_leader.unwrap().borrow_mut().all_equal = inst.from_leader.unwrap().borrow().all_equal && epual;
+            inst.from_leader.map(|mut s| {s.all_equal = s.all_equal && equal});
+            if !epual {
+                // TODO: Put this global var in the 
+                CONFLICT.lock().unwrap().add(1);
+            }
+        }
+
+        let mut all_commited = true;
+        for q in 0..epaxos_logic.info.n {
+            if inst.from_leader.unwrap().commited_deps[q] < paccreply.commited_deps[q] {
+                inst.from_leader.map(|mut s| {s.commited_deps[q] = paccreply.commited_deps[q]});
+                //inst.from_leader.unwrap().borrow_mut().commited_deps[q] = paccreply.commited_deps[q];
+            }
+            if inst.from_leader.unwrap().commited_deps[q] < epaxos_logic.commited_upto_instance[q] {
+                inst.from_leader.map(|mut s| {s.commited_deps[q] = epaxos_logic.commited_upto_instance[q]});
+                //inst.from_leader.unwrap().borrow_mut().commited_deps[q] = epaxos_logic.commited_upto_instance[q]
+            }
+            if inst.from_leader.unwrap().commited_deps[q] < inst.deps[q] {
+                all_commited = false;
+            }
+        }
+
+        if inst.from_leader.unwrap().pre_accept_oks >= epaxos_logic.info.n as u32 / 2 && inst.from_leader.unwrap().all_equal && all_commited && epaxos_logic.is_initial_ballot(inst.ballot) {
+            HAPPY.lock().unwrap().add(1);
+            info!("fast path in instance{:?}", paccreply.instance);
+            //epaxos_logic.instance_entry_space.get_mut(&paccreply.instance).unwrap().state = Some(State::Committed);
+            epaxos_logic.instance_entry_space.get_mut(&paccreply.instance).map(|mut s| {s.state = Some(State::Committed)});
+            epaxos_logic.update_committed(&paccreply.instance);
+            if !inst.from_leader.unwrap().client_proposals.is_none() && epaxos_logic.info.dreply {
+                // TODO: Fix me
+            //     // give clients the all clear
+			// for i := 0; i < len(inst.lb.clientProposals); i++ {
+			// 	r.ReplyProposeTS(
+			// 		&genericsmrproto.ProposeReplyTS{
+			// 			TRUE,
+			// 			inst.lb.clientProposals[i].CommandId,
+			// 			state.NIL,
+			// 			inst.lb.clientProposals[i].Timestamp},
+			// 		inst.lb.clientProposals[i].Reply)
+			// }
+            }
+
+            epaxos_logic.record_payload_metadata(inst);
+            epaxos_logic.sync();
+            self.broadcast_commit(&paccreply.instance, inst.command.unwrap(), inst.seq, inst.deps);
+        } else if inst.from_leader.unwrap().pre_accept_oks >= epaxos_logic.info.n as u32 / 2 {
+            if !all_commited {
+                WEIRD.lock().unwrap().add(1);
+            }
+            SLOW.lock().unwrap().add(1);
+            inst.state = Some(State::Accepted);
+            self.broadcast_accept(&paccreply.instance, inst.ballot, inst.command.unwrap().len() as u32, inst.seq ,inst.deps);
+        }
     }
 
     fn handle_try_pre_accept_reply(&self, try_pre_accept_reply: &TryPreAcceptReplyPayload) {
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        let mut inst = epaxos_logic.instance_entry_space.get(&try_pre_accept_reply.instance);
+        if inst.is_none() || inst.unwrap().from_leader.is_none() || !inst.unwrap().from_leader.unwrap().trying_to_pre_accept || inst.unwrap().from_leader.unwrap().recovery_insts.is_none() {
+            return;
+        }
+
+        let inst = inst.unwrap();
+        let mut ir = inst.from_leader.unwrap().recovery_insts;
+        if try_pre_accept_reply.ok > 0 {
+            inst.from_leader.map(|mut s| {s.pre_accept_oks += 1});
+            inst.from_leader.map(|mut s| {s.tpa_oks += 1});
+            // inst.unwrap().from_leader.unwrap().borrow_mut().pre_accept_oks += 1;
+            // inst.unwrap().from_leader.unwrap().borrow_mut().tpa_oks += 1;
+            if inst.from_leader.unwrap().pre_accept_oks >= epaxos_logic.info.n as u32 / 2 {
+                //it's safe to start Accept phase
+                inst.command = Some(ir.unwrap().command);
+                inst.seq = ir.unwrap().seq;
+                inst.deps = ir.unwrap().deps;
+                inst.state = Some(State::Accepted);
+                inst.from_leader.map(|mut s| {s.trying_to_pre_accept = false});
+                inst.from_leader.map(|mut s| {s.accept_oks = 0});
+                // inst.unwrap().from_leader.unwrap().borrow_mut().trying_to_pre_accept = false;
+                // inst.unwrap().from_leader.unwrap().borrow_mut().accept_oks = 0;
+                self.broadcast_accept(&try_pre_accept_reply.instance, inst.ballot, inst.command.unwrap().len() as u32, inst.seq, inst.deps);
+            }
+        } else {
+            inst.from_leader.map(|mut s| {s.nacks += 1});
+            //inst.unwrap().from_leader.unwrap().borrow_mut().nacks += 1;
+            if try_pre_accept_reply.ballot > inst.ballot {
+                //TODO: retry with higher ballot
+                return;
+            }
+            inst.from_leader.map(|mut s| {s.tpa_oks += 1});
+            //inst.from_leader.unwrap().borrow_mut().tpa_oks += 1;
+            if try_pre_accept_reply.conflict_instance.unwrap() == try_pre_accept_reply.instance {
+                //TODO: re-run prepare
+                //inst.unwrap().from_leader.unwrap().borrow_mut().trying_to_pre_accept = false;
+                inst.from_leader.map(|mut s| {s.trying_to_pre_accept = false});
+                return;
+            }
+
+            inst.from_leader.map(|mut s| {s.possible_quorum[try_pre_accept_reply.accept_id as usize] = false});
+            inst.from_leader.map(|mut s| {s.possible_quorum[try_pre_accept_reply.conflict_instance.unwrap().slot as usize] = false});
+            // inst.unwrap().from_leader.unwrap().borrow_mut().possible_quorum[try_pre_accept_reply.accept_id as usize] = false;
+            // inst.unwrap().from_leader.unwrap().borrow_mut().possible_quorum[try_pre_accept_reply.conflict_instance.unwrap().replica as usize] = false;
+
+            let mut not_in_quorum = 0;
+            for q in 0..epaxos_logic.info.n {
+                if !inst.from_leader.unwrap().possible_quorum[try_pre_accept_reply.accept_id as usize] {
+                    not_in_quorum += 1;
+                }
+            }
+
+            if try_pre_accept_reply.conflict_state.unwrap() >= State::Committed || not_in_quorum > epaxos_logic.info.n as u32 / 2 {
+                //abandon recovery, restart from phase 1
+                //inst.unwrap().from_leader.unwrap().borrow_mut().trying_to_pre_accept = false;
+                inst.from_leader.map(|mut s| {s.trying_to_pre_accept = false});
+                self.start_phase_one(&try_pre_accept_reply.instance, inst.ballot, inst.from_leader.unwrap().client_proposals.unwrap(), ir.unwrap().command, ir.unwrap().command.len() as u32);
+            }
+
+            if not_in_quorum == epaxos_logic.info.n as u32 / 2 {
+                //this is to prevent defer cycles
+                let (present, dp, _) = epaxos_logic.deferred_by_instance(&try_pre_accept_reply.instance.slot);
+                if present {
+                    if inst.from_leader.unwrap().possible_quorum[dp as usize] {
+                        //an instance whose leader must have been in this instance's quorum has been deferred for this instance => contradiction
+					    //abandon recovery, restart from phase 1
+                        // inst.unwrap().from_leader.unwrap().borrow_mut().trying_to_pre_accept = false;
+                        inst.from_leader.map(|mut s| {s.trying_to_pre_accept = false});
+                        self.start_phase_one(&try_pre_accept_reply.instance, inst.ballot, inst.from_leader.unwrap().client_proposals.unwrap(), ir.unwrap().command, ir.unwrap().command.len() as u32);
+                    }
+                }
+            }
+
+            if inst.from_leader.unwrap().tpa_oks >= epaxos_logic.info.n as u32 / 2 {
+                //defer recovery and update deferred information
+                epaxos_logic.update_deferred(&try_pre_accept_reply.instance.slot, &try_pre_accept_reply.conflict_instance.unwrap().slot);
+                //inst.unwrap().from_leader.unwrap().borrow_mut().trying_to_pre_accept = false;
+                inst.from_leader.map(|mut s| {s.trying_to_pre_accept = false});
+            }
+        }
 
     }
 
-    fn send_pre_accept_ok(&self, pre_accept_ok: PreAcceptOKPayload) {
+    fn handle_pre_accept_ok_reply(&self, pacc_ok_reply: PreAcceptOKPayload) {
+        info!("Handling PreAcceptok reply");
+        let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+        let mut inst = epaxos_logic.instance_entry_space.get_mut(&pacc_ok_reply.instance).unwrap();
 
+        if inst.state.unwrap() == State::PreAccepted {
+            return;
+        }
+
+        if !epaxos_logic.is_initial_ballot(inst.ballot) {
+            return;
+        }
+
+        inst.from_leader.map(|mut s| { s.pre_accept_oks  += 1});
+
+        let mut all_commited = true;
+        for q in 0..epaxos_logic.info.n {
+            if inst.from_leader.unwrap().commited_deps[q] < inst.from_leader.unwrap().original_deps[q] {
+                inst.from_leader.map(|mut s| {s.commited_deps[q] = inst.from_leader.unwrap().original_deps[q]});
+                //inst.from_leader.unwrap().borrow_mut().commited_deps[q] = paccreply.commited_deps[q];
+            }
+            if inst.from_leader.unwrap().commited_deps[q] < epaxos_logic.commited_upto_instance[q] {
+                inst.from_leader.map(|mut s| {s.commited_deps[q] = epaxos_logic.commited_upto_instance[q]});
+                //inst.from_leader.unwrap().borrow_mut().commited_deps[q] = epaxos_logic.commited_upto_instance[q]
+            }
+            if inst.from_leader.unwrap().commited_deps[q] < inst.deps[q] {
+                all_commited = false;
+            }
+        }
+
+        if inst.from_leader.unwrap().pre_accept_oks >= epaxos_logic.info.n as u32 / 2 && inst.from_leader.unwrap().all_equal && all_commited && epaxos_logic.is_initial_ballot(inst.ballot) {
+            HAPPY.lock().unwrap().add(1);
+            info!("fast path in instance{:?}", pacc_ok_reply.instance);
+            //epaxos_logic.instance_entry_space.get_mut(&paccreply.instance).unwrap().state = Some(State::Committed);
+            epaxos_logic.instance_entry_space.get_mut(&pacc_ok_reply.instance).map(|mut s| {s.state = Some(State::Committed)});
+            epaxos_logic.update_committed(&pacc_ok_reply.instance);
+            if !inst.from_leader.unwrap().client_proposals.is_none() && epaxos_logic.info.dreply {
+                // TODO: Fix me
+            //     // give clients the all clear
+			// for i := 0; i < len(inst.lb.clientProposals); i++ {
+			// 	r.ReplyProposeTS(
+			// 		&genericsmrproto.ProposeReplyTS{
+			// 			TRUE,
+			// 			inst.lb.clientProposals[i].CommandId,
+			// 			state.NIL,
+			// 			inst.lb.clientProposals[i].Timestamp},
+			// 		inst.lb.clientProposals[i].Reply)
+			// }
+            }
+
+            epaxos_logic.record_payload_metadata(inst);
+            epaxos_logic.sync();
+            self.broadcast_commit(&pacc_ok_reply.instance, inst.command.unwrap(), inst.seq, inst.deps);
+        } else if inst.from_leader.unwrap().pre_accept_oks >= epaxos_logic.info.n as u32 / 2 {
+            if !all_commited {
+                WEIRD.lock().unwrap().add(1);
+            }
+            SLOW.lock().unwrap().add(1);
+            inst.state = Some(State::Accepted);
+            self.broadcast_accept(&pacc_ok_reply.instance, inst.ballot, inst.command.unwrap().len() as u32, inst.seq ,inst.deps);
+        }
+        //TODO: take the slow path if messages are slow to arrive
+    }
+
+    fn send_pre_accept_ok(&self,replica_id: u32, pre_accept_ok: PreAcceptOKPayload) {
+        
     }
 
     // // send preaccept + handle preacceptreply
@@ -1073,7 +1348,7 @@ impl EpaxosService for EpaxosServerImpl {
         &mut self,
         ctx: ::grpcio::RpcContext,
         req: super::epaxos::PreAcceptPayload,
-        sink: UnarySink<super::epaxos::PreAcceptReplyPayload>,
+        sink: ::grpcio::UnarySink<super::epaxos::PreAcceptReplyPayload>,
     ) {
         info!("Received PreAccept");
         let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
@@ -1211,20 +1486,20 @@ impl EpaxosService for EpaxosServerImpl {
                     deps,
                     commited_deps: epaxos_logic.commited_upto_instance,
                 };
-                return Ok(pre_accept_reply_payload.to_grpc());
+                sink.success(pre_accept_reply_payload.to_grpc());
             } else {
                 let pok = PreAcceptOKPayload {
                     instance: pre_accept_request.0.instance,
                 };
-                self_inner.send_pre_accept_ok(pok);
+                self_inner.send_pre_accept_ok(pre_accept_request.0.leader_id ,pok);
                 // TODO: handle pre_accept_ok
-                Ok(())
+                //Ok(())
             }
 
             // let r = epaxos_logic.pre_accept_(pre_accept_request);
             // Ok(r.0.to_grpc())
         };
-        super::util::spawn_grpc_task(sink, task);
+        //super::util::spawn_grpc_task(sink, task);
     }
 
     // handle accept
@@ -1313,8 +1588,65 @@ impl EpaxosService for EpaxosServerImpl {
         req: super::epaxos::CommitPayload,
         sink: ::grpcio::UnarySink<Empty>,
     ) {
-        // info!("Commit");
-        // let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
+        info!("handle Commit");
+        let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
+        let mut epaxos_logic = self_inner.epaxos_logic.lock().unwrap();
+        let commit_payload = CommitPayload::from_grpc(&req);
+        let mut inst = epaxos_logic.instance_entry_space.get_mut(&commit_payload.instance);
+
+        if commit_payload.seq > epaxos_logic.max_seq {
+            epaxos_logic.max_seq = commit_payload.seq + 1;
+        }
+
+        if commit_payload.instance.slot > epaxos_logic.current_instance[commit_payload.instance.replica as usize] {
+            epaxos_logic.current_instance[commit_payload.instance.replica as usize] = commit_payload.instance.slot + 1;
+        }
+
+        match inst {
+            Some(instance) => {
+                if !instance.from_leader.is_none() && !instance.from_leader.unwrap().client_proposals.is_none() && commit_payload.command.len() == 0 {
+                    // someone committed a NO-OP, but we have proposals for this instance
+			        // try in a different instance
+                    // for _, p := range inst.lb.clientProposals {
+                    //     r.ProposeChan <- p
+                    // }
+                    instance.from_leader = None;
+                }
+                instance.seq = commit_payload.seq;
+                instance.deps = commit_payload.deps;
+                instance.state = Some(State::Committed);
+            },
+            None => {
+                epaxos_logic.instance_entry_space.insert(commit_payload.instance, InstanceEntry {
+                    ballot: 0,
+                    command: Some(commit_payload.command),
+                    seq: commit_payload.seq,
+                    deps: commit_payload.deps,
+                    instance: commit_payload.instance,
+                    state: Some(State::Committed),
+                    from_leader: None,
+                });
+                epaxos_logic.update_conflicts(commit_payload.command, &commit_payload.instance, commit_payload.seq);
+
+                if commit_payload.command.len() == 0 {
+                    // checkpoint
+			        // update latest checkpoint info
+                    epaxos_logic.lastest_cp_replica = commit_payload.instance.replica;
+                    epaxos_logic.lastest_cp_instance = commit_payload.instance.slot;
+
+                    // discard dependency hashtables
+                    epaxos_logic.clear_hashtables();
+                }
+            },
+        }
+
+        epaxos_logic.update_committed(&commit_payload.instance);
+        epaxos_logic.record_payload_metadata(epaxos_logic.instance_entry_space.get(&commit_payload.instance).unwrap());
+        epaxos_logic.record_commands(commit_payload.command);
+
+        let respond = Empty::new();
+        sink.success(respond);
+
         // let task = async move {
         //     let mut epaxos_logic = self_inner.epaxos_logic.lock().unwrap();
         //     let request = Commit(Payload::from_grpc(&req));
@@ -1323,6 +1655,7 @@ impl EpaxosService for EpaxosServerImpl {
         //     Ok(r)
         // };
         // super::util::spawn_grpc_task(sink, task);
+
     }
 
     fn prepare(
@@ -1351,7 +1684,7 @@ impl EpaxosService for EpaxosServerImpl {
                         deps: nil_deps,
                         instance: prepare_request.0.instance,
                         state: None,
-                        from_leader: Some(RefCell::new(CommandLeaderBookKeeping::default())),
+                        from_leader: Some(CommandLeaderBookKeeping::default()),
                     },
                 );
 
@@ -1384,7 +1717,7 @@ impl EpaxosService for EpaxosServerImpl {
                         ok,
                         instance: prepare_request.0.instance,
                         ballot: instance.ballot,
-                        state: instance.state.unwrap(),
+                        state: Some(instance.state.unwrap()),
                         command: instance.command.unwrap(),
                         seq: instance.seq,
                         deps: instance.deps,
@@ -1416,7 +1749,59 @@ impl EpaxosService for EpaxosServerImpl {
         req: crate::epaxos::CommitShortPayload,
         sink: grpcio::UnarySink<crate::epaxos::Empty>,
     ) {
-        todo!()
+        info!("handle Commit-short");
+        let self_inner = Arc::<EpaxosServerInner>::clone(&self.inner);
+        let mut epaxos_logic = self_inner.epaxos_logic.lock().unwrap();
+        let commit_short_payload = CommitShortPayload::from_grpc(&req);
+        
+        let mut inst = epaxos_logic.instance_entry_space.get_mut(&commit_short_payload.instance);
+        
+        if commit_short_payload.instance.slot > epaxos_logic.current_instance[commit_short_payload.instance.replica as usize] {
+            epaxos_logic.current_instance[commit_short_payload.instance.replica as usize] = commit_short_payload.instance.slot + 1;
+        }
+
+        match inst {
+            Some(instance) => {
+                if !instance.from_leader.is_none() && instance.from_leader.unwrap().client_proposals.is_none() {
+                    // try command in a different instance
+                    // TODO: fix this
+                    // for _, p := range inst.lb.clientProposals {
+                    //     r.ProposeChan <- p
+                    // }
+                    instance.from_leader = None;
+                }
+                instance.seq = commit_short_payload.seq;
+                instance.deps = commit_short_payload.deps;
+                instance.state = Some(State::Committed);
+            },
+            None => {
+                epaxos_logic.instance_entry_space.insert(commit_short_payload.instance, InstanceEntry {
+                    ballot: 0,
+                    command: None,
+                    seq: commit_short_payload.seq,
+                    deps: commit_short_payload.deps,
+                    instance: commit_short_payload.instance,
+                    state: Some(State::Committed),
+                    from_leader: None,
+                });
+
+                if commit_short_payload.count == 0 {
+                    // checkpoint
+			        // update latest checkpoint info
+                    epaxos_logic.lastest_cp_replica = commit_short_payload.instance.replica;
+                    epaxos_logic.lastest_cp_instance = commit_short_payload.instance.slot;
+
+                    // discard dependency hashtables
+                    epaxos_logic.clear_hashtables();
+                }
+            },
+        }
+
+        epaxos_logic.update_committed(&commit_short_payload.instance);
+        epaxos_logic.record_payload_metadata(epaxos_logic.instance_entry_space.get(&commit_short_payload.instance).unwrap());
+
+        let respond = Empty::new();
+        sink.success(respond);
     }
 
     // handle propose
@@ -1469,15 +1854,15 @@ impl EpaxosService for EpaxosServerImpl {
         //     proposals.insert(i as usize, prop);
         // }
 
-        self_inner.start_phase_one(
-            &Instance {
-                replica: epaxos_logic.info.id.0,
-                slot: *inst_no,
-            },
-            0,
-            ProposePayload::from_grpc(&req),
-            //batch_size,
-        );
+        // self_inner.start_phase_one(
+        //     &Instance {
+        //         replica: epaxos_logic.info.id.0,
+        //         slot: *inst_no,
+        //     },
+        //     0,
+        //     ProposePayload::from_grpc(&req),
+        //     //batch_size,
+        // );
 
         let respond = Empty::new();
         sink.success(respond);
@@ -1515,7 +1900,7 @@ impl EpaxosService for EpaxosServerImpl {
             crate::util::spawn_grpc_task(sink, task);
         }
 
-        let (mut conflicts, mut conf_instance) = epaxos_logic.find_pre_accept_conflicts(
+        let (mut conflicts, mut conf_instance, _) = epaxos_logic.find_pre_accept_conflicts(
             try_pre_accept_request.0.command,
             try_pre_accept_request.0.instance,
             try_pre_accept_request.0.seq,
@@ -1529,12 +1914,18 @@ impl EpaxosService for EpaxosServerImpl {
                     instance: try_pre_accept_request.0.instance,
                     ok: 0,
                     ballot: inst.unwrap().ballot,
-                    conflict_instance: conf_instance,
+                    conflict_instance: Some(Instance{
+                        replica: try_pre_accept_request.0.instance.replica,
+                        slot: conf_instance,
+                    }),
                     conflict_state: Some(epaxos_logic
                         .instance_entry_space
-                        .get(&conf_instance)
+                        .get(&Instance{
+                            replica: try_pre_accept_request.0.instance.replica,
+                            slot: conf_instance,
+                        })
                         .unwrap()
-                        .state), // 同上
+                        .state.unwrap()), // 同上
                 };
                 Ok(try_pre_accept_reply.to_grpc())
             };
