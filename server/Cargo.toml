@@ -22,15 +22,15 @@ petgraph = "0.6.0"
 sled = "0.34.6"
 bitvec = "0.22.3"
 lazy_static = "1.4.0"
-circular-queue = "0.2.6"
+yaml-rust = "0.4.5"
 
 [build-dependencies]
 protoc-grpcio = "3.0.0"
 log = "0.4.14"
 
 [lib]
-name = "sharedlib"
-path = "src/classic/mod.rs"
+name = "server"
+
 
 [[bin]]
 name = "server"

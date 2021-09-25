@@ -1,16 +1,11 @@
-use std::cell::RefCell;
+#![allow(unused_imports)]
+
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs::File;
 
-
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Copy, PartialOrd, Ord)]
 pub struct ReplicaId(pub u32);
-
-// #[derive(Clone)]
-// pub struct PayloadState {
-//     pub state: State,
-// }
 
 #[derive(Clone, PartialEq, Eq, Copy)]
 pub enum Operation {
@@ -25,7 +20,6 @@ pub struct Command {
     pub key: String,
     pub value: i32,
 }
-
 
 #[derive(Default, Clone)]
 pub struct ProposePayload {
@@ -149,6 +143,7 @@ pub struct CommitShortPayload {
     pub deps: Vec<u32>,
 }
 
+#[derive(Default)]
 pub struct TryPreAcceptPayload {
     pub leader_id: u32,
     pub instance: Instance,
@@ -166,8 +161,6 @@ pub struct TryPreAcceptReplyPayload {
     pub conflict_instance: Option<Instance>,
     pub conflict_state: Option<State>,
 }
-
-
 
 // #[derive(Clone)]
 // pub struct AcceptOKPayload {
@@ -269,8 +262,8 @@ pub fn sort_instances(inst1: &Instance, inst2: &Instance) -> Ordering {
 
 pub struct CoreInfo {
     pub n: usize,
-    pub id: ReplicaId,
-    pub peer_addr_list: Vec<String>,
+    pub id: u32,
+    //pub peer_addr_list: Vec<String>,
     pub peers: Vec<grpcio::Client>,
     pub peer_readers: Vec<ProposePayload>,
     pub peer_writers: Vec<ProposePayload>,
@@ -289,4 +282,7 @@ pub struct CoreInfo {
     pub preferred_peer_order: Vec<u32>,
     pub ewma: Vec<f64>,
     pub on_client_connect: bool,
+
+    pub defer_map: BTreeMap<u64, u64>,
+    pub tpa_payload: Option<TryPreAcceptPayload>,
 }

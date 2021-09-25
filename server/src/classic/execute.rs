@@ -9,9 +9,9 @@ use std::sync::Arc;
 use petgraph::graph::node_index as n;
 use petgraph::graph::NodeIndex;
 
-use crate::message::Instance;
-use crate::message::LogEntry;
-use crate::message::State;
+use crate::classic::message::Instance;
+use crate::classic::message::LogEntry;
+use crate::classic::message::State;
 
 #[derive(Default)]
 pub struct ExecutorInner {
@@ -80,7 +80,8 @@ impl Executor {
                 }
                 for to_inst in log_entry.deps.iter() {
                     gr_map.push((instance as usize, *to_inst as usize));
-                    seq_slot.insert(instance as usize, (instance, log_entry.seq as usize));
+                    // TODO: fix this
+                    //seq_slot.insert(instance as usize, (instance, log_entry.seq as usize));
                     self.build_graph(*to_inst, gr_map, seq_slot);
                 }
             }

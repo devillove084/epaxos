@@ -7,7 +7,7 @@ pub const MAXBATCH: usize = 10000;
 pub const CLOCK_SYNC_NONE: u32 = 0;
 pub const LOCALHOST: &str = "127.0.0.1";
 
-pub const MAX_DEPTH_DEP:i32 = 10;
+pub const MAX_DEPTH_DEP: i32 = 10;
 pub const TRUE: u8 = 1;
 pub const FALSE: u8 = 0;
 pub const DS: i32 = 5;

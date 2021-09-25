@@ -1,8 +1,25 @@
-use crate::{execute::Executor, message::{Command, CommandLeaderBookKeeping, CoreInfo, Instance, InstanceEntry, LogEntry, PreAcceptReplyPayload, ReplicaId, State}};
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(unused_assignments)]
+
+use crate::{classic::{
+    execute::Executor,
+    message::{
+        Command, CommandLeaderBookKeeping, CoreInfo, Instance, InstanceEntry, LogEntry, Operation,
+        PreAcceptReplyPayload, PrepareReplyPayload, ReplicaId, State,
+    },
+    server::EpaxosServerInner,
+}, cli::cli::CLIParam};
 
 use super::config::REPLICAS_NUM;
 use log::info;
-use std::{cmp, collections::{BTreeMap, HashMap, HashSet}, fmt};
+use std::{
+    cmp,
+    collections::{BTreeMap, HashMap, HashSet},
+    fmt,
+    ops::{Shl, Shr},
+};
 
 pub struct EpaxosLogic {
     //pub id: ReplicaId,
@@ -26,30 +43,40 @@ pub struct EpaxosLogic {
 
 impl EpaxosLogic {
     // id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, beacon bool, durable bool
-    pub fn init(id: ReplicaId, peerAddrList: Vec<String>, thrifty: bool, exec: bool, dreply: bool, beacon: bool, durable: bool) -> EpaxosLogic {
+    pub fn init(
+        param: CLIParam
+        // id: ReplicaId,
+        // peerAddrList: Vec<String>,
+        // thrifty: bool,
+        // exec: bool,
+        // dreply: bool,
+        // beacon: bool,
+        // durable: bool,
+    ) -> EpaxosLogic {
         let commands = vec![HashMap::new(); REPLICAS_NUM];
         let info = CoreInfo {
             n: REPLICAS_NUM,
-            id,
-            peer_addr_list: peerAddrList,
+            id: param.replica_id,
+            //peer_addr_list: param.peer_addr_list,
             peers: Vec::new(),
             peer_readers: Vec::new(),
             peer_writers: Vec::new(),
             alive: BTreeMap::new(),
             state: None,
             shutdown: false,
-            thrifty,
-            beacon,
-            durable,
+            thrifty: param.thrifty,
+            beacon: param.beacon,
+            durable: param.durable,
             stable_store: None,
             preferred_peer_order: Vec::new(),
             ewma: Vec::new(),
             on_client_connect: false,
-            dreply,
-            exec,
+            dreply: param.dreply,
+            exec: param.exec,
+            defer_map: BTreeMap::new(),
+            tpa_payload: None,
         };
         // spawn run to start the core logic
-
 
         EpaxosLogic {
             cmds: commands,
@@ -70,22 +97,389 @@ impl EpaxosLogic {
         }
     }
 
-    // pub fn update_log(&mut self, log_entry: LogEntry, instance: &Instance) {
-    //     info!("updating log..");
-    //     //TODO: Flush executed logs to disks
-    //     let state = self.cmds[instance.replica as usize]
-    //         .get(&(instance.slot as usize))
-    //         .unwrap()
-    //         .state;
-    //     match state {
-    //         State::Committed => {
-    //             // TODO:async????
-    //             self._execute(instance);
-    //             log_entry.state.change_executed();
-    //             self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+    // pub fn _handle_prepare_reply(&self, preply: &PrepareReplyPayload, xxx: &EpaxosServerInner) {
+    //     if let Some(inst) = self.instance_entry_space.get_mut(&preply.instance) {
+    //         //let mut epaxos_logic = self.epaxos_logic.lock().unwrap();
+    //         let preparing = inst.from_leader.as_ref().unwrap().preparing;
+    //         if inst.from_leader.is_none() || !preparing {
+    //             // TODO: fix return
+    //             // we've moved on -- these are delayed replies, so just ignore
+    //             // TODO: should replies for non-current ballots be ignored?
+    //             return;
     //         }
-    //         _ => {
-    //             self.cmds[instance.replica as usize].insert(instance.slot as usize, log_entry);
+
+    //         if preply.ok == 0 {
+    //             // TODO: there is probably another active leader, back off and retry later
+    //             //inst.from_leader.as_ref().unwrap().borrow_mut().nacks += 1;
+    //             inst.from_leader.as_mut().map(|s| s.nacks += 1);
+    //         }
+
+    //         if inst.from_leader.as_ref().unwrap().prepare_oks < self.info.n as u32 / 2 {
+    //             // return or maybe record this as log
+    //             return;
+    //         }
+
+    //         //Got an ACK (preply.OK == TRUE)
+
+    //         inst.from_leader.as_mut().map(|mut s| s.prepare_oks += 1);
+
+    //         if inst.state.unwrap() == State::Committed || inst.state.unwrap() == State::Executed {
+    //             self.instance_entry_space.insert(
+    //                 preply.instance,
+    //                 InstanceEntry {
+    //                     ballot: inst.ballot,
+    //                     command: Some(preply.command.clone()),
+    //                     seq: preply.seq,
+    //                     deps: preply.deps.clone(),
+    //                     instance: preply.instance,
+    //                     state: Some(State::Committed),
+    //                     from_leader: None,
+    //                 },
+    //             );
+
+    //             //broadcastcommit
+    //             xxx.broadcast_commit(
+    //                 &preply.instance,
+    //                 &inst.command.as_ref().unwrap(),
+    //                 preply.seq,
+    //                 preply.deps.clone(),
+    //             );
+    //             return;
+    //         }
+
+    //         //let ri = inst.from_leader.as_mut().unwrap().recovery_insts.as_mut();
+    //         if preply.state == Some(State::Accepted) {
+    //             if inst
+    //                 .from_leader
+    //                 .as_ref()
+    //                 .unwrap()
+    //                 .recovery_insts
+    //                 .as_ref()
+    //                 .is_none()
+    //                 || inst.from_leader.as_ref().unwrap().max_recv_ballot < preply.ballot
+    //             {
+    //                 inst.from_leader.as_mut().map(|mut s| {
+    //                     s.recovery_insts.as_mut().map(|mut re| {
+    //                         re.command = preply.command.clone();
+    //                         re.state = preply.state.unwrap();
+    //                         re.seq = preply.seq;
+    //                         re.deps = preply.deps.clone();
+    //                         re.pre_accept_count = 0;
+    //                         re.command_leader_response = false;
+    //                     });
+    //                     s.max_recv_ballot = preply.ballot;
+    //                 });
+    //             }
+    //         }
+
+    //         if (preply.state == Some(State::PreAccepted)
+    //             && preply.state == Some(State::PreAcceptedEq))
+    //             && (inst
+    //                 .from_leader
+    //                 .as_ref()
+    //                 .unwrap()
+    //                 .recovery_insts
+    //                 .as_ref()
+    //                 .is_none()
+    //                 || inst
+    //                     .from_leader
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .state
+    //                     < State::Accepted)
+    //         {
+    //             if inst
+    //                 .from_leader
+    //                 .as_mut()
+    //                 .unwrap()
+    //                 .recovery_insts
+    //                 .as_mut()
+    //                 .is_none()
+    //             {
+    //                 inst.from_leader
+    //                     .as_mut()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_mut()
+    //                     .map(|s| {
+    //                         s.command = preply.command.clone();
+    //                     });
+    //             } else if preply.seq == inst.seq && equal(preply.deps.clone(), inst.deps.clone()) {
+    //                 inst.from_leader
+    //                     .as_mut()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_mut()
+    //                     .map(|s| {
+    //                         s.pre_accept_count += 1;
+    //                     });
+    //             } else if preply.state == Some(State::PreAccepted) {
+    //                 inst.from_leader
+    //                     .as_mut()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_mut()
+    //                     .map(|s| {
+    //                         s.command = preply.command.clone();
+    //                         s.state = preply.state.unwrap();
+    //                         s.seq = preply.seq;
+    //                         s.deps = preply.deps.clone();
+    //                         s.pre_accept_count += 1;
+    //                         s.command_leader_response = false;
+    //                     });
+    //             } else if preply.accept_id == preply.instance.replica {
+    //                 inst.from_leader
+    //                     .as_mut()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_mut()
+    //                     .map(|s| {
+    //                         s.command_leader_response = true;
+    //                     });
+    //             }
+    //         }
+
+    //         if inst.from_leader.as_ref().unwrap().recovery_insts.is_none() {
+    //             //at least one replica has (pre-)accepted this instance
+    //             if inst
+    //                 .from_leader
+    //                 .as_ref()
+    //                 .unwrap()
+    //                 .recovery_insts
+    //                 .as_ref()
+    //                 .unwrap()
+    //                 .state
+    //                 == State::Accepted
+    //                 || (!inst
+    //                     .from_leader
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .command_leader_response
+    //                     && inst
+    //                         .from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .pre_accept_count
+    //                         >= self.info.n as u32 / 2
+    //                     && (self.info.thrifty
+    //                         || inst
+    //                             .from_leader
+    //                             .as_ref()
+    //                             .unwrap()
+    //                             .recovery_insts
+    //                             .as_ref()
+    //                             .unwrap()
+    //                             .state
+    //                             == State::PreAcceptedEq))
+    //             {
+    //                 // safe to go to accept phase
+    //                 inst.command = Some(
+    //                     inst.from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .command
+    //                         .clone(),
+    //                 );
+    //                 inst.seq = inst
+    //                     .from_leader
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .seq;
+    //                 inst.deps = inst
+    //                     .from_leader
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .deps
+    //                     .clone();
+    //                 inst.from_leader.as_mut().map(|s| {
+    //                     s.preparing = false;
+    //                 });
+
+    //                 // broadcast accepts
+    //                 xxx.broadcast_accept(
+    //                     &preply.instance,
+    //                     inst.ballot,
+    //                     inst.command.as_ref().unwrap().len() as u32,
+    //                     inst.seq,
+    //                     inst.deps.clone(),
+    //                 );
+    //             } else if !inst
+    //                 .from_leader
+    //                 .as_ref()
+    //                 .unwrap()
+    //                 .recovery_insts
+    //                 .as_ref()
+    //                 .unwrap()
+    //                 .command_leader_response
+    //                 && inst
+    //                     .from_leader
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .recovery_insts
+    //                     .as_ref()
+    //                     .unwrap()
+    //                     .pre_accept_count
+    //                     >= (self.info.n as u32 / 2 + 1) / 2
+    //             {
+    //                 //send TryPreAccepts
+    //                 //but first try to pre-accept on the local replica
+    //                 inst.from_leader.as_mut().map(|s| {
+    //                     s.pre_accept_oks = 0;
+    //                     s.nacks = 0;
+    //                     s.possible_quorum.clear();
+    //                 });
+
+    //                 for q in 0..self.info.n {
+    //                     inst.from_leader.as_mut().map(|s| {
+    //                         s.possible_quorum[q] = true;
+    //                     });
+    //                 }
+
+    //                 let (conflict, replica_q, instance_i) = self.find_pre_accept_conflicts(
+    //                     &inst
+    //                         .from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .command
+    //                         .clone(),
+    //                     preply.instance,
+    //                     inst.from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .seq,
+    //                     inst.from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .deps
+    //                         .clone(),
+    //                 );
+    //                 if conflict {
+    //                     if self
+    //                         .instance_entry_space
+    //                         .get(&Instance {
+    //                             replica: replica_q,
+    //                             slot: instance_i,
+    //                         })
+    //                         .unwrap()
+    //                         .state
+    //                         .unwrap()
+    //                         == State::Committed
+    //                     {
+    //                         // start Phase1 in the initial leader's instance
+    //                         // self.start_phase_one(
+    //                         //     &preply.instance,
+    //                         //     inst.ballot,
+    //                         //     inst.from_leader.map(|s| {s.client_proposals}).unwrap().unwrap(),
+    //                         //     ir.command,
+    //                         //     ir.command.len() as u32,
+    //                         // );
+    //                         // return;
+    //                     } else {
+    //                         inst.from_leader.as_mut().map(|s| s.nacks = 1);
+    //                         inst.from_leader
+    //                             .as_mut()
+    //                             .map(|s| s.possible_quorum[self.info.id.0 as usize] = false);
+    //                     }
+    //                 } else {
+    //                     inst.command = Some(
+    //                         inst.from_leader
+    //                             .as_ref()
+    //                             .unwrap()
+    //                             .recovery_insts
+    //                             .as_ref()
+    //                             .unwrap()
+    //                             .command
+    //                             .clone(),
+    //                     );
+    //                     inst.seq = inst
+    //                         .from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .seq;
+    //                     inst.deps = inst
+    //                         .from_leader
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .recovery_insts
+    //                         .as_ref()
+    //                         .unwrap()
+    //                         .deps
+    //                         .clone();
+    //                     inst.state = Some(State::PreAccepted);
+    //                     inst.from_leader.as_mut().map(|s| {
+    //                         s.pre_accept_oks = 1;
+    //                     });
+    //                 }
+
+    //                 inst.from_leader.as_mut().map(|s| s.preparing = false);
+    //                 inst.from_leader
+    //                     .as_mut()
+    //                     .map(|s| s.trying_to_pre_accept = true);
+    //                 xxx.broadcast_try_pre_accept(
+    //                     &preply.instance,
+    //                     inst.ballot,
+    //                     inst.command.as_ref().unwrap().to_vec(),
+    //                     inst.seq,
+    //                     inst.deps.clone(),
+    //                 );
+    //             } else {
+    //                 inst.from_leader.as_mut().map(|s| s.preparing = false);
+    //                 // self.start_phase_one(
+    //                 //     &preply.instance,
+    //                 //     inst.ballot,
+    //                 //     inst.from_leader.map(|s| {s.client_proposals}).unwrap().unwrap(),
+    //                 //     ir.command,
+    //                 //     ir.command.len() as u32,
+    //                 // );
+    //             }
+    //         } else {
+    //             let mut noop_deps: Vec<u32> = Vec::new();
+    //             noop_deps[preply.instance.replica as usize] = preply.instance.slot - 1;
+    //             //inst.from_leader.unwrap().borrow_mut().preparing = false;
+    //             inst.from_leader.as_mut().map(|s| s.preparing = false);
+    //             self.instance_entry_space.insert(
+    //                 preply.instance,
+    //                 InstanceEntry {
+    //                     ballot: inst.ballot,
+    //                     command: None,
+    //                     seq: 0,
+    //                     deps: noop_deps.clone(),
+    //                     instance: preply.instance,
+    //                     state: Some(State::Accepted),
+    //                     from_leader: inst.from_leader.clone(),
+    //                 },
+    //             );
+    //             xxx.broadcast_accept(&preply.instance, inst.ballot, 0, 0, noop_deps.clone());
     //         }
     //     }
     // }
@@ -93,7 +487,8 @@ impl EpaxosLogic {
     pub fn _execute(&mut self, instance: &Instance) {
         let mut gr_map = Vec::new();
         let mut seq_slot = BTreeMap::new();
-        self.exec.build_graph(instance.slot, &mut gr_map, &mut seq_slot);
+        self.exec
+            .build_graph(instance.slot, &mut gr_map, &mut seq_slot);
 
         // Construct the slot -> Graph
         let mut bs = BTreeMap::new();
@@ -117,409 +512,306 @@ impl EpaxosLogic {
         self.exec.execute()
     }
 
-    
+    pub fn find_pre_accept_conflicts(
+        &mut self,
+        cmds: &Vec<Command>,
+        instance: Instance,
+        seq: u32,
+        deps: &Vec<u32>,
+    ) -> (bool, u32, u32) {
+        if let Some(inst) = self.instance_entry_space.get(&instance) {
+            if inst.command.as_ref().unwrap().len() > 0 {
+                if inst.state.unwrap() >= State::Accepted {
+                    // already ACCEPTED or COMMITTED
+                    // we consider this a conflict because we shouldn't regress to PRE-ACCEPTED
+                    return (true, instance.replica, instance.slot)
+                }
+                if inst.seq == self.info.tpa_payload.as_ref().unwrap().seq && equal(inst.deps.clone(), self.info.tpa_payload.as_ref().unwrap().deps.to_vec()) {
+                    // already PRE-ACCEPTED, no point looking for conflicts again
+                    return (false, instance.replica, instance.slot);
+                }
+            }
+        }
+        // if !inst.is_none() && inst.unwrap().command.unwrap().len() > 0 {
+        //     if inst.unwrap().state.unwrap() >= State::Accepted {
+        //         // already ACCEPTED or COMMITTED
+        //         // we consider this a conflict because we shouldn't regress to PRE-ACCEPTED
+        //         return (true, instance.replica, instance.slot);
+        //     }
+        //     if inst.unwrap().seq == self.info.tpa_payload.unwrap().seq
+        //         && equal(
+        //             inst.unwrap().deps,
+        //             self.info.tpa_payload.unwrap().deps.to_vec(),
+        //         )
+        //     {
+        //         // already PRE-ACCEPTED, no point looking for conflicts again
+        //         return (false, instance.replica, instance.slot);
+        //     }
+        // }
 
-    
+        for q in 0..self.info.n {
+            for i in self.execed_upto_instance[q]..self.current_instance[q] {
+                if instance.replica == q as u32 && instance.slot == i {
+                    // no point checking past instance in replica's row, since replica would have
+                    // set the dependencies correctly for anything started after instance
+                    break;
+                }
 
-    // pub fn lead_consensus(&mut self, write_req: WriteRequest) -> Payload {
-    //     // lead_consensus is meaning phase one
-    //     let slot = self.instance_number;
-    //     let interf = self.find_interference(&write_req.key);
-    //     let seq = 1 + self.find_max_seq(&interf);
-    //     // ballot number start with 0
-    //     let log_entry = LogEntry {
-    //         ballot: 0,
-    //         key: write_req.key.to_owned(),
-    //         value: write_req.value,
-    //         seq: seq,
-    //         deps: interf.clone(),
-    //         state: State::PreAccepted,
-    //     };
-    //     // Not only update log, actually update cmd space, it is preAccepted
-    //     self.update_log(
-    //         log_entry,
-    //         &Instance {
-    //             replica: self.id.0,
-    //             slot: slot,
-    //         },
-    //     );
-    //     Payload {
-    //         // every write request start with natural number 0
-    //         ballot: 0,
-    //         write_req,
-    //         seq,
-    //         deps: interf,
-    //         instance: Instance {
-    //             replica: self.id.0,
-    //             slot,
-    //         },
-    //         from_leader: CommandLeaderBookKeeping::default(),
-    //     }
-    // }
+                if i == deps[q] {
+                    // the instance cannot be a dependency for itself
+                    continue;
+                }
 
-    // pub fn decide_path(&self, pre_accept_oks: Vec<Payload>, payload: &Payload) -> Path {
-    //     // TODO: We have to judge the pre_accepts_ok vector len at least n/2 - 1
-    //     let mut new_payload = payload.clone();
-    //     let mut path = Path::Fast(payload.clone());
-    //     for pre_accept_ok in pre_accept_oks {
-    //         let Payload {
-    //             ballot,
-    //             seq,
-    //             deps,
-    //             instance: _,
-    //             command,
-    //             state,
-    //             from_leader,
-    //         } = pre_accept_ok.clone();
-    //         if seq == payload.seq && deps == payload.deps {
-    //             continue;
-    //         } else {
-    //             info!("Got some dissenting voice: {:#?}", pre_accept_ok.deps);
-    //             // Union deps from all replies
-    //             let new_deps = self.union_deps(new_payload.deps, pre_accept_ok.deps);
-    //             new_payload.deps = new_deps.clone();
-    //             // Set seq to max of seq from all replies
-    //             if pre_accept_ok.seq > seq {
-    //                 new_payload.seq = pre_accept_ok.seq;
-    //             }
-    //             path = Path::Slow(new_payload.clone());
-    //         }
-    //     }
-    //     path
-    // }
+                if let Some(inst) = self.instance_entry_space.get(&Instance {
+                        replica: q as u32,
+                        slot: i,
+                }) {
+                    if inst.command.is_none() || inst.command.as_ref().unwrap().len() == 0 {
+                        continue;
+                    }
+                    if inst.deps[instance.replica as usize] > instance.slot {
+                        continue;
+                    }
 
-    // pub fn committed(&mut self, payload: Payload) {
-    //     let Payload {
-    //         ballot,
-    //         write_req,
-    //         seq,
-    //         deps,
-    //         instance,
-    //         from_leader,
-    //     } = payload;
-    //     self.instance_number += 1;
-    //     let log_entry = LogEntry {
-    //         ballot,
-    //         key: write_req.key,
-    //         value: write_req.value,
-    //         seq: seq,
-    //         deps: deps,
-    //         state: State::Committed,
-    //     };
-    //     self.inst_ballot.insert(instance, ballot);
-    //     self.update_log(
-    //         log_entry,
-    //         &Instance {
-    //             replica: instance.replica,
-    //             slot: instance.slot,
-    //         },
-    //     );
-    //     info!("Commited. My log is {:#?}", self.cmds);
-    // }
+                    if self.conflict_batch(inst.command.as_ref().unwrap(), cmds) {
+                        if i > deps[q]
+                            || (i < deps[q]
+                                && inst.seq >= seq
+                                && (q != instance.replica as usize
+                                    || inst.state.unwrap() > State::PreAcceptedEq))
+                        {
+                            // this is a conflict
+                            return (true, q as u32, i);
+                        }
+                    }
+                } else {
+                    continue;
+                }
+                // let mut inst_s = self.instance_entry_space.get_mut(&Instance {
+                //     replica: q as u32,
+                //     slot: i,
+                // });
+                // if inst_s.is_none()
+                //     || inst_s.unwrap().command.is_none()
+                //     || inst.unwrap().command.unwrap().len() == 0
+                // {
+                //     continue;
+                // }
+                // if inst.unwrap().deps[instance.replica as usize] > instance.slot {
+                //     // instance q.i depends on instance replica.instance, it is not a conflict
+                //     continue;
+                // }
 
-    // pub fn accepted(&mut self, payload: Payload) {
-    //     let Payload {
-    //         ballot,
-    //         write_req,
-    //         seq,
-    //         deps,
-    //         instance,
-    //         from_leader,
-    //     } = payload;
-    //     let log_entry = LogEntry {
-    //         ballot,
-    //         key: write_req.key,
-    //         value: write_req.value,
-    //         seq: seq,
-    //         deps: deps,
-    //         state: State::Accepted,
-    //     };
-    //     self.inst_ballot.insert(instance, ballot);
-    //     self.update_log(
-    //         log_entry,
-    //         &Instance {
-    //             replica: instance.replica,
-    //             slot: instance.slot,
-    //         },
-    //     );
-    // }
-
-    // pub fn union_deps(&self, mut deps1: Vec<Instance>, mut deps2: Vec<Instance>) -> Vec<Instance> {
-    //     deps1.append(&mut deps2);
-    //     deps1.sort_by(sort_instances);
-    //     deps1.dedup();
-    //     deps1
-    // }
-
-    // pub fn pre_accept_(&mut self, pre_accept_req: PreAccept) -> PreAcceptOK {
-    //     let Payload {
-    //         ballot,
-    //         write_req,
-    //         seq,
-    //         mut deps,
-    //         instance,
-    //         from_leader,
-    //     } = pre_accept_req.0;
-    //     let WriteRequest {
-    //         key,
-    //         value,
-    //         request_id,
-    //         timestamp,
-    //     } = write_req.clone();
-    //     info!("Processing PreAccept for key: {}, value: {}", key, value);
-    //     let interf = self.find_interference(&key);
-    //     let seq_ = cmp::max(seq, 1 + self.find_max_seq(&interf));
-    //     if interf != deps {
-    //         deps = self.union_deps(deps, interf);
-    //     }
-    //     let log_entry = LogEntry {
-    //         ballot,
-    //         key: key.to_owned(),
-    //         value: value,
-    //         seq: seq_,
-    //         deps: deps.clone(),
-    //         state: State::PreAccepted,
-    //     };
-    //     // update cmd
-    //     self.update_log(log_entry, &instance);
-    //     self.inst_ballot.insert(instance, ballot);
-    //     PreAcceptOK(Payload {
-    //         ballot,
-    //         write_req: write_req,
-    //         seq: seq_,
-    //         deps: deps,
-    //         instance: instance,
-    //         from_leader,
-    //     })
-    // }
-
-    // pub fn aware_ballot(&mut self, payload: &Payload) -> Payload {
-    //     let deps = self.cmds[payload.instance.replica as usize]
-    //         .get(&(payload.instance.slot as usize))
-    //         .unwrap()
-    //         .deps;
-
-    //     //TODO: how do i know the max proposql id in my replica
-    //     // how do i construct the Prepare(epoch.(b+1).Q, instance) in the payload.
-        
-    //     Payload::default()
-    // }
-
-    // pub fn decide_prepare(
-    //     &mut self,
-    //     replies: Vec<PrepareOKPayload>,
-    //     payload: &Payload,
-    // ) -> PrepareStage {
-    //     if replies.contain(payload) == State::Committed {
-    //         return PrepareStage::Commit(*payload);
-    //     } else if replies.contain(payload) == State::Accepted {
-    //         return PrepareStage::PaxosAccept(*payload);
-    //     } else if replies.at_least_contain(*payload) == State::PreAccepted {
-    //         return PrepareStage::PaxosAccept(*payload);
-    //     } else if replies.at_least_one_contain(payload) {
-    //         // start Phase 1 (at line 2) for γ at L.i, avoid fast path
-    //         // XXX: This is wrong code.
-    //         return PrepareStage::PhaseOne(*payload);
-    //     }else {
-    //         //TODO: start Phase 1 (at line 2) for no-op at L.i, avoid fast path
-    //         // XXX: This is wrong code
-    //         return PrepareStage::PhaseOne(*payload);
-    //     }
-    // }
-
-    // pub fn reply_prepare_ok(
-    //     &mut self,
-    //     info: Payload,
-    // ) -> Result<PrepareOKPayload, std::fmt::Error> {
-    //     //TODO: How do i know "epoch.b.Qislargerthanthemostrecentballot number epoch.x.Y accepted for instance L.i "
-    //     return Err(todo!());
-    // }
-
-    // pub fn accept_(&mut self, accept_req: Accept) -> AcceptOK {
-    //     info!("=======ACCEPT========");
-    //     let Payload {
-    //         ballot,
-    //         write_req,
-    //         seq,
-    //         deps,
-    //         instance,
-    //         from_leader,
-    //     } = accept_req.0;
-    //     let WriteRequest {
-    //         key,
-    //         value,
-    //         request_id,
-    //         timestamp,
-    //     } = write_req.clone();
-    //     let log_entry = LogEntry {
-    //         ballot,
-    //         key: key,
-    //         value: value,
-    //         seq: seq,
-    //         deps: deps,
-    //         state: State::Accepted,
-    //     };
-    //     self.update_log(log_entry, &instance);
-    //     self.inst_ballot.insert(instance, ballot);
-    //     AcceptOK(AcceptOKPayload {
-    //         write_req: write_req,
-    //         instance: instance,
-    //     })
-    // }
-    // pub fn commit_(&mut self, commit_req: Commit) -> () {
-    //     let Payload {
-    //         ballot,
-    //         write_req,
-    //         seq,
-    //         deps,
-    //         instance,
-    //         from_leader,
-    //     } = commit_req.0;
-    //     let log_entry = LogEntry {
-    //         ballot,
-    //         key: write_req.key,
-    //         value: write_req.value,
-    //         seq: seq,
-    //         deps: deps,
-    //         state: State::Committed,
-    //     };
-    //     // Update the state in the log to commit
-    //     self.inst_ballot.insert(instance, ballot);
-    //     self.update_log(log_entry, &instance);
-    //     info!("Committed. My log is {:#?}", self.cmds);
-    // }
-
-    pub fn find_pre_accept_conflicts(&self, cmds: Vec<Command>, instance: Instance, seq: u32, deps: Vec<u32>) -> (bool, u32, u32) {
-
+                
+            }
+        }
+        return (false, u32::MAX, u32::MAX);
     }
 
-    pub fn clear_hashtables(&self) {
-        
+    fn conflict(&self, cmd1: &Command, cmd2: &Command) -> bool {
+        if cmd1.key == cmd2.key {
+            if cmd1.op == Operation::Put || cmd2.op == Operation::Put {
+                return true;
+            }
+        }
+        return false;
     }
 
-    pub fn update_attributes(&self, cmds: Vec<Command>, seq: u32, deps: Vec<u32>, instance: &Instance) -> (u32, Vec<u32>, bool) {
-
+    fn conflict_batch(&self, batch1: &Vec<Command>, batch2: &Vec<Command>) -> bool {
+        for i in 0..batch1.len() {
+            for j in 0..batch2.len() {
+                if self.conflict(&batch1[i], &batch2[j]) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
-    pub fn update_conflicts(&self, cmds: Vec<Command>, instance: &Instance, seq: u32) {
-
+    pub fn clear_hashtables(&mut self) {
+        for q in 0..self.info.n {
+            // XXX: does it satisfied??
+            self.conflicts[q].clear();
+        }
     }
 
-    pub fn record_payload_metadata(&self, instance: &InstanceEntry) {
+    pub fn update_attributes(
+        &mut self,
+        cmds: Vec<Command>,
+        mut seq: u32,
+        mut deps: Vec<u32>,
+        instance: &Instance,
+    ) -> (u32, Vec<u32>, bool) {
+        let mut changed = false;
+        for q in 0..self.info.n {
+            if self.info.id != instance.replica && q == instance.replica as usize {
+                continue;
+            }
 
+            for i in 0..cmds.len() {
+                let present = self.conflicts[q].get(&cmds[i].key);
+                match present {
+                    Some(d) => {
+                        if d > &deps[q] {
+                            deps[q] = *d;
+                            if seq
+                                <= self
+                                    .instance_entry_space
+                                    .get(&Instance {
+                                        replica: q as u32,
+                                        slot: i as u32,
+                                    })
+                                    .unwrap()
+                                    .seq
+                            {
+                                seq = self
+                                    .instance_entry_space
+                                    .get(&Instance {
+                                        replica: q as u32,
+                                        slot: i as u32,
+                                    })
+                                    .unwrap()
+                                    .seq;
+                            }
+                            changed = true;
+                            break;
+                        }
+                    }
+                    None => {
+                        unreachable!();
+                    }
+                }
+            }
+        }
+
+        for i in 0..cmds.len() {
+            let present = self.max_seq_per_key.get(&cmds[i].key);
+            match present {
+                Some(s) => {
+                    if seq <= *s {
+                        changed = true;
+                        seq = s + 1;
+                    }
+                }
+                None => {
+                    unreachable!();
+                }
+            }
+        }
+
+        return (seq, deps, changed);
     }
 
-    pub fn record_commands(&self, cmds: Vec<Command>) {
+    pub fn update_conflicts(&mut self, cmds: &Vec<Command>, instance: &Instance, seq: u32) {
+        for i in 0..cmds.len() {
+            let present = self.conflicts[instance.replica as usize].get(&cmds[i].key);
+            match present {
+                Some(d) => {
+                    if d < &instance.slot {
+                        self.conflicts[instance.replica as usize]
+                            .insert(cmds[i].key.clone(), instance.slot);
+                    }
+                }
+                None => {
+                    self.conflicts[instance.replica as usize].insert(cmds[i].key.clone(), instance.slot);
+                }
+            }
 
+            let present = self.max_seq_per_key.get(&cmds[i].key);
+            match present {
+                Some(s) => {
+                    if s < &seq {
+                        self.max_seq_per_key.insert(cmds[i].key.clone(), seq);
+                    }
+                }
+                None => {
+                    self.max_seq_per_key.insert(cmds[i].key.clone(), seq);
+                }
+            }
+        }
     }
 
-    pub fn update_committed(&self, instance: &Instance) {
-        
+    pub fn record_payload_metadata(&self, instance: &InstanceEntry) {}
+
+    pub fn record_commands(&self, cmds: &Vec<Command>) {}
+
+    pub fn sync(&self) {}
+
+    pub fn update_committed(&mut self, instance: &Instance) {
+        let iter_inst = Instance {
+            replica: instance.replica,
+            slot: self.commited_upto_instance[instance.replica as usize] + 1,
+        };
+        let iter_inst_entry = self.instance_entry_space.get(&iter_inst);
+        while !iter_inst_entry.is_none()
+            && (iter_inst_entry.unwrap().state.unwrap() == State::Committed
+                || iter_inst_entry.unwrap().state.unwrap() == State::Executed)
+        {
+            self.commited_upto_instance[instance.replica as usize] += 1;
+        }
     }
 
-    pub fn sync(&self) {
+    pub fn merge_attributes(
+        &self,
+        mut seq1: u32,
+        mut deps1: Vec<u32>,
+        seq2: u32,
+        deps2: Vec<u32>,
+    ) -> (u32, Vec<u32>, bool) {
+        let mut equal = true;
+        if seq1 != seq2 {
+            equal = false;
+            if seq2 > seq1 {
+                seq1 = seq2;
+            }
+        }
 
-    }
+        for q in 0..self.info.n {
+            if q == self.info.id as usize {
+                continue;
+            }
 
-    pub fn merge_attributes(&self, seq1: u32, deps1: Vec<u32>, seq2: u32, deps2: Vec<u32>) -> (u32, Vec<u32>, bool) {
+            if deps1[q] != deps2[q] {
+                equal = false;
+                if deps2[q] > deps1[q] {
+                    deps1[q] = deps2[q];
+                }
+            }
+        }
 
+        return (seq1, deps1, equal);
     }
 
     pub fn is_initial_ballot(&self, ballot: u32) -> bool {
-        true
+        ballot >> 4 == 0
     }
 
-    pub fn update_deferred(&self, a: &u32, b: &u32) {
-
+    pub fn update_deferred(&mut self, dr: u32, di: u32, r: u32, i: u32) {
+        let daux = (dr as u64).shl(32) | (di as u64);
+        let aux = (r as u64).shl(32) | (i as u64);
+        self.info.defer_map.insert(aux, daux);
     }
 
-    pub fn deferred_by_instance(&self, instance: &u32) -> (bool, u32, u32) {
-
+    pub fn deferred_by_instance(&self, q: u32, i: u32) -> (bool, u32, u32) {
+        let mut aux: u64 = (q as u64).shl(32) | (i as u64);
+        let daux = self.info.defer_map.get(&aux);
+        let mut dq: u32 = 0;
+        let mut di: u32 = 0;
+        match daux {
+            Some(dd) => {
+                dq = (*dd as u32).shr(32);
+                di = *dd as u32;
+            }
+            None => {
+                return (false, 0, 0);
+            }
+        }
+        return (true, dq, di);
     }
-
-    // fn find_interference(&self, key: &String) -> Vec<Instance> {
-    //     let mut interf = Vec::new();
-    //     for replica in 0..REPLICAS_NUM {
-    //         for (slot, log_entry) in self.cmds[replica].iter() {
-    //             if log_entry.key == *key {
-    //                 let instance = Instance {
-    //                     replica: replica as u32,
-    //                     slot: *slot as u32,
-    //                 };
-    //                 interf.push(instance);
-    //             }
-    //         }
-    //     }
-    //     interf.sort_by(sort_instances);
-    //     interf
-    // }
-
-    // fn find_max_seq(&self, interf: &Vec<Instance>) -> u32 {
-    //     let mut seq = 0;
-    //     for instance in interf {
-    //         let interf_seq = self.cmds[instance.replica as usize]
-    //             .get(&(instance.slot as usize))
-    //             .unwrap()
-    //             .seq;
-    //         if interf_seq > seq {
-    //             seq = interf_seq;
-    //         }
-    //     }
-    //     seq
-    // }
-
-    // pub fn find_all_instance(&self, instance: &Instance, deps: Vec<Instance>) -> usize {
-    //     let mut hs = HashSet::new();
-    //     hs.insert(instance.slot);
-    //     for i in deps {
-    //         hs.insert(i.slot);
-    //     }
-    //     return hs.len();
-    // }
-
-    // pub fn _recovery_instance(&self, payload: &mut Payload) {
-
-    //     //TODO: 这里应加上判断是否有状态
-    //     let log_entry = self.cmds[payload.instance.replica as usize].get(&(payload.instance.slot as usize));
-    //     match log_entry {
-    //         Some(lentry) => {
-    //             match lentry.state {
-    //                 State::PreAccepted => {
-    //                     payload.from_leader.recovery_insts = RecoveryPayload {
-    //                         ballot: payload.ballot,
-    //                         write_req: payload.write_req,
-    //                         seq: payload.seq,
-    //                         deps: payload.deps,
-    //                         instance: payload.instance,
-    //                         pre_accept_count: 1,
-    //                         command_leader_response: (self.id.0 == payload.instance.replica),
-    //                     }
-    //                 },
-    //                 State::Accepted => {
-    //                     payload.from_leader.recovery_insts = RecoveryPayload {
-    //                         ballot: payload.ballot,
-    //                         write_req: payload.write_req,
-    //                         seq: payload.seq,
-    //                         deps: payload.deps,
-    //                         instance: payload.instance,
-    //                         pre_accept_count: 0,
-    //                         command_leader_response: false,
-    //                     };
-    //                     payload.from_leader.max_recv_ballot = payload.ballot;
-    //                 },
-    //                 _ => unreachable!(),
-    //             }
-    //         },
-    //         None => todo!(),
-    //     }
-
-    //     payload.ballot = self.make_ballot_larger_than(payload.ballot);
-    // }
 
     // Ballot helper function
-
     pub fn make_unique_ballot(&self, ballot: u32) -> u32 {
-        return (ballot << 4) | self.id.0;
+        return (ballot << 4) | self.info.id;
     }
 
     pub fn make_ballot_larger_than(&self, ballot: u32) -> u32 {
@@ -528,7 +820,15 @@ impl EpaxosLogic {
 }
 
 pub fn equal(a: Vec<u32>, b: Vec<u32>) -> bool {
-    true
+    if a.len() != b.len() {
+        return false;
+    }
+    for i in 0..a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
 }
 
 impl fmt::Debug for LogEntry {
@@ -554,6 +854,7 @@ impl fmt::Debug for State {
             State::Accepted => write!(f, "Accepted"),
             State::Committed => write!(f, "Committed"),
             State::Executed => write!(f, "Executed"),
+            State::PreAcceptedEq => write!(f, "PreAcceptedEQ"),
         }
     }
 }

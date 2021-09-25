@@ -1,0 +1,10 @@
+# This is a epaxos replica config file example
+
+id: 0
+master_addr: 127.0.0.1
+master_port: 10000
+thrifty: true
+exec: true
+dreply: true
+beacon: true
+durable: true
